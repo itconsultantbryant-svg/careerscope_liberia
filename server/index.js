@@ -87,14 +87,28 @@ app.use('/api/calls', callRoutes);
 
 // Serve static files from React app in production
 if (process.env.NODE_ENV === 'production') {
-  const clientPath = join(__dirname, '../../client/dist');
-  console.log(`🔍 Looking for client build at: ${clientPath}`);
+  // Try multiple possible paths for the client dist directory
+  const possiblePaths = [
+    join(__dirname, '../../client/dist'),  // From server/index.js
+    join(process.cwd(), 'client/dist'),     // From project root
+    join(process.cwd(), '../client/dist'),   // Alternative
+  ];
+  
+  let clientPath = null;
+  for (const path of possiblePaths) {
+    if (existsSync(path)) {
+      clientPath = path;
+      console.log(`✅ Found client build directory at: ${clientPath}`);
+      break;
+    }
+  }
+  
+  console.log(`🔍 Looking for client build. Checked paths:`, possiblePaths);
   console.log(`📁 Current __dirname: ${__dirname}`);
   console.log(`📁 Process CWD: ${process.cwd()}`);
   
   // Only serve static files if dist directory exists
-  if (existsSync(clientPath)) {
-    console.log(`✅ Found client build directory at: ${clientPath}`);
+  if (clientPath && existsSync(clientPath)) {
     app.use(express.static(clientPath));
     
     // Handle React routing, return all requests to React app (except API routes)
@@ -111,12 +125,8 @@ if (process.env.NODE_ENV === 'production') {
       }
     });
   } else {
-    console.warn(`⚠️  Client build directory not found at ${clientPath}. Static files will not be served.`);
-    // Try alternative paths
-    const altPath1 = join(process.cwd(), 'client/dist');
-    const altPath2 = join(process.cwd(), '../client/dist');
-    console.log(`🔍 Trying alternative path 1: ${altPath1} - ${existsSync(altPath1) ? 'EXISTS' : 'NOT FOUND'}`);
-    console.log(`🔍 Trying alternative path 2: ${altPath2} - ${existsSync(altPath2) ? 'EXISTS' : 'NOT FOUND'}`);
+    console.warn(`⚠️  Client build directory not found. Checked paths:`, possiblePaths);
+    console.warn(`⚠️  Static files will not be served. API endpoints are still available.`);
     // Fallback: return a helpful message for non-API routes
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) {
