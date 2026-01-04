@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg;
+  }
+  
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-primary-600 font-semibold py-3 px-6 rounded-lg border-2 border-primary-600 transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow duration-300 p-6;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all;
+  }
+}
+
+/* React Big Calendar Custom Styles */
+.rbc-calendar {
+  @apply bg-white rounded-lg;
+}
+
+.rbc-header {
+  @apply border-b-2 border-gray-200 py-3 font-semibold text-gray-700;
+}
+
+.rbc-today {
+  @apply bg-primary-50;
+}
+
+.rbc-off-range-bg {
+  @apply bg-gray-50;
+}
+
+.rbc-event {
+  @apply rounded-lg px-2 py-1 text-sm font-medium;
+}
+
+.rbc-event-content {
+  @apply text-white;
+}
+
+.rbc-toolbar {
+  @apply mb-4;
+}
+
+.rbc-toolbar button {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors;
+}
+
+.rbc-toolbar button:hover {
+  @apply bg-gray-100;
+}
+
+.rbc-toolbar button.rbc-active {
+  @apply bg-primary-600 text-white;
+}
+
+.rbc-day-slot .rbc-time-slot {
+  @apply border-t border-gray-100;
+}
+
+.rbc-time-header-content {
+  @apply border-l border-gray-200;
+}
+
+.rbc-time-content {
+  @apply border-t border-gray-200;
+}
+
+.rbc-day-bg {
+  @apply border-r border-gray-200;
+}
+
+.rbc-agenda-view table {
+  @apply w-full;
+}
+
+.rbc-agenda-view table tbody > tr > td {
+  @apply py-2 px-4 border-b border-gray-200;
+}
+
+.rbc-agenda-view table thead > tr > th {
+  @apply py-3 px-4 bg-gray-50 font-semibold text-gray-700 border-b-2 border-gray-200;
+}

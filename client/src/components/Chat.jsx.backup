@@ -1,0 +1,788 @@
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
+import api from '../utils/api';
+import { toast } from 'sonner';
+import EmojiPicker from 'emoji-picker-react';
+import {
+  Send, Image as ImageIcon, Paperclip, Mic, Phone, Video,
+  X, Smile, ThumbsUp, Heart, Smile as SmileIcon, Frown, Angry, Meh,
+  MoreVertical, Reply, Download, Play, Pause, Users
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const REACTIONS = [
+  { name: 'like', icon: ThumbsUp, emoji: '👍' },
+  { name: 'love', icon: Heart, emoji: '❤️' },
+  { name: 'laugh', icon: SmileIcon, emoji: '😂' },
+  { name: 'wow', icon: Meh, emoji: '😮' },
+  { name: 'sad', icon: Frown, emoji: '😢' },
+  { name: 'angry', icon: Angry, emoji: '😠' },
+];
+
+export default function Chat({ selectedUser, onClose }) {
+  const { user } = useAuth();
+  const { socket, isConnected } = useSocket();
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [conversationId, setConversationId] = useState(null);
+  const [typing, setTyping] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [playingAudio, setPlayingAudio] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [reactionMenu, setReactionMenu] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  const [callType, setCallType] = useState(null);
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [peerConnection, setPeerConnection] = useState(null);
+  
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const documentInputRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedUser) {
+      fetchMessages();
+      const convId = [user.id, selectedUser.id].sort().join('_');
+      setConversationId(convId);
+      
+      if (socket) {
+        socket.emit('join_conversation', convId);
+        
+        socket.on('new_message', (message) => {
+          if (message.senderId === selectedUser.id || message.receiverId === selectedUser.id) {
+            setMessages(prev => {
+              // Check if message already exists to avoid duplicates
+              const exists = prev.some(m => m.id === message.id || (m.id === message.messageId));
+              if (exists) return prev;
+              return [...prev, message];
+            });
+            scrollToBottom();
+          }
+        });
+
+        socket.on('user_typing', (data) => {
+          if (data.userId === selectedUser.id) {
+            setIsTyping(data.isTyping);
+            setTimeout(() => setIsTyping(false), 3000);
+          }
+        });
+
+        socket.on('incoming_call', (data) => {
+          if (data.from === selectedUser.id) {
+            handleIncomingCall(data);
+          }
+        });
+
+        socket.on('call_answered', (data) => {
+          if (data.from === selectedUser.id) {
+            handleCallAnswer(data);
+          }
+        });
+
+        socket.on('call_ended', (data) => {
+          if (data.from === selectedUser.id) {
+            handleCallEnd();
+          }
+        });
+      }
+    }
+
+    return () => {
+      if (socket && conversationId) {
+        socket.emit('leave_conversation', conversationId);
+        socket.off('new_message');
+        socket.off('user_typing');
+        socket.off('incoming_call');
+        socket.off('call_answered');
+        socket.off('call_ended');
+      }
+    };
+  }, [selectedUser, socket]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const res = await api.get(`/messages/${selectedUser.id}`);
+      setMessages(res.data.messages || []);
+    } catch (error) {
+      toast.error('Failed to load messages');
+    }
+  };
+
+  const sendMessage = async (content = null, messageType = 'text', attachment = null) => {
+    if (!content && !attachment) return;
+
+    try {
+      const formData = new FormData();
+      if (content) formData.append('content', content);
+      if (attachment) formData.append('attachment', attachment);
+      formData.append('receiverId', String(selectedUser.id));
+      formData.append('messageType', messageType);
+      if (replyTo) formData.append('replyToMessageId', String(replyTo.id));
+
+      const res = await api.post('/messages', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const messageData = {
+        ...res.data.messageData,
+        sender_id: res.data.messageData.sender_id || user.id,
+        receiver_id: res.data.messageData.receiver_id || selectedUser.id,
+      };
+
+      if (socket) {
+        socket.emit('send_message', {
+          ...messageData,
+          senderId: messageData.sender_id,
+          receiverId: messageData.receiver_id,
+        });
+      }
+
+      setMessages(prev => {
+        // Check if message already exists to avoid duplicates
+        const exists = prev.some(m => m.id === messageData.id);
+        if (exists) return prev;
+        return [...prev, messageData];
+      });
+      setNewMessage('');
+      setReplyTo(null);
+      setAudioBlob(null);
+      scrollToBottom();
+    } catch (error) {
+      console.error('Send message error:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || 'Failed to send message';
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleTyping = (isTyping) => {
+    if (socket && !typing && isTyping) {
+      setTyping(true);
+      socket.emit('typing', {
+        senderId: user.id,
+        receiverId: selectedUser.id,
+        isTyping: true,
+      });
+    } else if (socket && typing && !isTyping) {
+      setTyping(false);
+      socket.emit('typing', {
+        senderId: user.id,
+        receiverId: selectedUser.id,
+        isTyping: false,
+      });
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setRecording(true);
+    } catch (error) {
+      toast.error('Failed to access microphone');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      setRecording(false);
+      setMediaRecorder(null);
+    }
+  };
+
+  const sendVoiceMessage = () => {
+    if (audioBlob) {
+      sendMessage(null, 'voice', audioBlob);
+    }
+  };
+
+  const handleFileSelect = (e, type) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (type === 'image') {
+        sendMessage(null, 'image', file);
+      } else {
+        sendMessage(null, 'document', file);
+      }
+    }
+  };
+
+  const addReaction = async (messageId, reaction) => {
+    try {
+      await api.post(`/messages/${messageId}/reaction`, { reaction });
+      fetchMessages();
+      setReactionMenu(null);
+    } catch (error) {
+      toast.error('Failed to add reaction');
+    }
+  };
+
+  const removeReaction = async (messageId) => {
+    try {
+      await api.delete(`/messages/${messageId}/reaction`);
+      fetchMessages();
+    } catch (error) {
+      toast.error('Failed to remove reaction');
+    }
+  };
+
+  const startCall = async (type) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: type === 'video',
+        audio: true,
+      });
+
+      setLocalStream(stream);
+      setCallType(type);
+      setInCall(true);
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      // Create peer connection (simplified - in production, use proper WebRTC signaling)
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      });
+
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      
+      pc.ontrack = (event) => {
+        setRemoteStream(event.streams[0]);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      setPeerConnection(pc);
+
+      // Create offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      if (socket) {
+        socket.emit('call_signal', {
+          to: selectedUser.id,
+          signal: offer,
+          type,
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to start call');
+      console.error('Call error:', error);
+    }
+  };
+
+  const handleIncomingCall = (data) => {
+    const accept = window.confirm(`Incoming ${data.type} call from ${selectedUser.first_name}. Accept?`);
+    if (accept) {
+      answerCall(data);
+    } else {
+      endCall();
+    }
+  };
+
+  const answerCall = async (data) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: data.type === 'video',
+        audio: true,
+      });
+
+      setLocalStream(stream);
+      setCallType(data.type);
+      setInCall(true);
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      });
+
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      
+      pc.ontrack = (event) => {
+        setRemoteStream(event.streams[0]);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      await pc.setRemoteDescription(data.signal);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      if (socket) {
+        socket.emit('call_answer', {
+          to: selectedUser.id,
+          signal: answer,
+        });
+      }
+
+      setPeerConnection(pc);
+    } catch (error) {
+      toast.error('Failed to answer call');
+    }
+  };
+
+  const handleCallAnswer = (data) => {
+    if (peerConnection) {
+      peerConnection.setRemoteDescription(data.signal);
+    }
+  };
+
+  const endCall = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => track.stop());
+      setRemoteStream(null);
+    }
+    if (peerConnection) {
+      peerConnection.close();
+      setPeerConnection(null);
+    }
+    if (socket) {
+      socket.emit('call_end', { to: selectedUser.id });
+    }
+    setInCall(false);
+    setCallType(null);
+  };
+
+  const playAudio = (audioUrl) => {
+    if (playingAudio === audioUrl) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        setPlayingAudio(null);
+      }
+    } else {
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.play();
+        setPlayingAudio(audioUrl);
+        audioRef.current.onended = () => setPlayingAudio(null);
+      }
+    }
+  };
+
+  const formatTime = (date) => {
+    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-white">
+      {/* Chat Header */}
+      <div className="flex items-center justify-between p-4 border-b bg-white">
+        <div className="flex items-center space-x-3">
+          <button onClick={onClose} className="md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+          <div className="w-10 h-10 bg-primary-200 rounded-full flex items-center justify-center">
+            {selectedUser.profile_image ? (
+              <img src={selectedUser.profile_image} alt={selectedUser.first_name} className="w-10 h-10 rounded-full" />
+            ) : (
+              <span className="text-primary-600 font-semibold">
+                {selectedUser.first_name?.charAt(0)}
+              </span>
+            )}
+          </div>
+          <div>
+            <p className="font-semibold">{selectedUser.first_name} {selectedUser.last_name}</p>
+            <p className="text-xs text-gray-500">
+              {isTyping ? 'typing...' : isConnected ? 'online' : 'offline'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => startCall('voice')}
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
+            title="Voice Call"
+          >
+            <Phone className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => startCall('video')}
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
+            title="Video Call"
+          >
+            <Video className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Call Interface */}
+      <AnimatePresence>
+        {inCall && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black z-50 flex flex-col"
+          >
+            <div className="flex-1 relative">
+              {callType === 'video' && (
+                <>
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute bottom-4 right-4 w-48 h-36 rounded-lg object-cover border-2 border-white"
+                  />
+                </>
+              )}
+              {callType === 'voice' && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-white">
+                    <div className="w-32 h-32 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-4xl font-bold">
+                        {selectedUser.first_name?.charAt(0)}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-semibold">
+                      {selectedUser.first_name} {selectedUser.last_name}
+                    </p>
+                    <p className="text-gray-400 mt-2">Voice Call</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-center space-x-4 p-6 bg-gray-900">
+              <button
+                onClick={endCall}
+                className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
+              >
+                <Phone className="w-6 h-6 text-white rotate-[135deg]" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        {messages
+          .filter((message, index, self) => 
+            // Remove duplicates based on id
+            index === self.findIndex(m => m.id === message.id)
+          )
+          .map((message, index) => (
+          <div
+            key={message.id || `message-${index}-${message.created_at}`}
+            className={`flex ${message.sender_id === user.id ? 'justify-end' : 'justify-start'}`}
+          >
+            <div className={`flex items-start space-x-2 max-w-[70%] ${message.sender_id === user.id ? 'flex-row-reverse space-x-reverse' : ''}`}>
+              {message.sender_id !== user.id && (
+                <div className="w-8 h-8 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
+                  {message.sender_image ? (
+                    <img src={message.sender_image} alt={message.sender_name} className="w-8 h-8 rounded-full" />
+                  ) : (
+                    <span className="text-primary-600 text-xs font-semibold">
+                      {message.sender_name?.charAt(0)}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div
+                className={`relative group ${
+                  message.sender_id === user.id
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-white text-gray-900'
+                } rounded-lg px-4 py-2 shadow-sm`}
+              >
+                {/* Reply Preview */}
+                {message.reply_to_content && (
+                  <div className={`mb-2 pb-2 border-b ${message.sender_id === user.id ? 'border-white/30' : 'border-gray-300'}`}>
+                    <p className="text-xs font-semibold opacity-75">
+                      Replying to {message.reply_to_sender_name}
+                    </p>
+                    <p className="text-xs opacity-75 truncate">
+                      {message.reply_to_type === 'image' ? '📷 Image' :
+                       message.reply_to_type === 'document' ? '📄 Document' :
+                       message.reply_to_type === 'voice' ? '🎤 Voice message' :
+                       message.reply_to_content}
+                    </p>
+                  </div>
+                )}
+
+                {/* Message Content */}
+                {message.message_type === 'image' && message.attachment_url ? (
+                  <img src={message.attachment_url} alt="Shared image" className="max-w-xs rounded-lg mb-1" />
+                ) : message.message_type === 'document' && message.attachment_url ? (
+                  <div className="flex items-center space-x-2">
+                    <Paperclip className="w-4 h-4" />
+                    <a
+                      href={message.attachment_url}
+                      download={message.attachment_name}
+                      className="underline hover:opacity-80"
+                    >
+                      {message.attachment_name || 'Document'}
+                    </a>
+                    <Download className="w-4 h-4" />
+                  </div>
+                ) : message.message_type === 'voice' && message.attachment_url ? (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => playAudio(message.attachment_url)}
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30"
+                    >
+                      {playingAudio === message.attachment_url ? (
+                        <Pause className="w-4 h-4" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </button>
+                    <span className="text-sm">Voice message</span>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                )}
+
+                {/* Reactions */}
+                {message.reactions && message.reactions.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {message.reactions.map((reaction, idx) => {
+                      const reactionData = REACTIONS.find(r => r.name === reaction.reaction);
+                      return (
+                        <span key={idx} className="text-xs bg-white/20 px-2 py-1 rounded-full">
+                          {reactionData?.emoji} {reaction.user_name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <p className="text-xs opacity-75 mt-1">{formatTime(message.created_at)}</p>
+
+                {/* Message Actions */}
+                <div className={`absolute ${message.sender_id === user.id ? 'left-0' : 'right-0'} top-0 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-lg rounded-lg p-1 flex items-center space-x-1`}>
+                  <button
+                    onClick={() => setReplyTo(message)}
+                    className="p-1 hover:bg-gray-100 rounded"
+                    title="Reply"
+                  >
+                    <Reply className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setReactionMenu(reactionMenu === message.id ? null : message.id)}
+                      className="p-1 hover:bg-gray-100 rounded"
+                      title="React"
+                    >
+                      <Smile className="w-4 h-4 text-gray-600" />
+                    </button>
+                    {reactionMenu === message.id && (
+                      <div className="absolute bottom-full left-0 mb-2 flex items-center space-x-1 bg-white rounded-full shadow-lg p-1">
+                        {REACTIONS.map((reaction) => {
+                          const Icon = reaction.icon;
+                          return (
+                            <button
+                              key={reaction.name}
+                              onClick={() => addReaction(message.id, reaction.name)}
+                              className="p-1 hover:scale-125 transition-transform"
+                              title={reaction.name}
+                            >
+                              <span className="text-lg">{reaction.emoji}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setReactionMenu(null)}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <MoreVertical className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="bg-white rounded-lg px-4 py-2 shadow-sm">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Reply Preview */}
+      {replyTo && (
+        <div className="px-4 py-2 bg-gray-100 border-t flex items-center justify-between">
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-gray-600">Replying to {replyTo.sender_name}</p>
+            <p className="text-xs text-gray-500 truncate">
+              {replyTo.content || (replyTo.message_type === 'image' ? '📷 Image' : 'Voice message')}
+            </p>
+          </div>
+          <button onClick={() => setReplyTo(null)} className="text-gray-500 hover:text-gray-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Voice Message Preview */}
+      {audioBlob && (
+        <div className="px-4 py-2 bg-gray-100 border-t flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Mic className="w-5 h-5 text-primary-600" />
+            <span className="text-sm text-gray-700">Voice message ready</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setAudioBlob(null)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <button
+              onClick={sendVoiceMessage}
+              className="btn-primary text-sm py-1 px-3"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Input Area */}
+      <div className="p-4 border-t bg-white">
+        <div className="flex items-end space-x-2">
+          <div className="flex-1 flex items-end space-x-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-gray-600 hover:text-primary-600 transition-colors"
+              title="Send Image"
+            >
+              <ImageIcon className="w-5 h-5" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFileSelect(e, 'image')}
+              className="hidden"
+            />
+            <button
+              onClick={() => documentInputRef.current?.click()}
+              className="p-2 text-gray-600 hover:text-primary-600 transition-colors"
+              title="Send Document"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+            <input
+              ref={documentInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              onChange={(e) => handleFileSelect(e, 'document')}
+              className="hidden"
+            />
+            <textarea
+              value={newMessage}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                handleTyping(e.target.value.length > 0);
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (newMessage.trim()) {
+                    sendMessage(newMessage);
+                  }
+                }
+              }}
+              placeholder="Type a message..."
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none resize-none max-h-32"
+              rows="1"
+            />
+            <button
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="p-2 text-gray-600 hover:text-primary-600 transition-colors"
+              title="Emoji"
+            >
+              <Smile className="w-5 h-5" />
+            </button>
+            {recording ? (
+              <button
+                onClick={stopRecording}
+                className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
+                title="Stop Recording"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            ) : (
+              <button
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onMouseLeave={stopRecording}
+                className="p-2 text-gray-600 hover:text-primary-600 transition-colors"
+                title="Hold to Record"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => sendMessage(newMessage)}
+            disabled={!newMessage.trim()}
+            className="btn-primary p-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Hidden Audio Element */}
+      <audio ref={audioRef} className="hidden" />
+    </div>
+  );
+}
+
