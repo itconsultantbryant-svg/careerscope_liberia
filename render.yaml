@@ -3,7 +3,7 @@ services:
     name: careerscope
     env: node
     plan: starter
-    buildCommand: npm run install:all && cd client && (VITE_API_URL=$VITE_API_URL npm run build || (echo "Build failed!" && exit 1)) && echo "Build completed successfully" && ls -la dist
+    buildCommand: npm run install:all && cd client && VITE_API_URL=${VITE_API_URL} npm run build && echo "Build completed - checking dist:" && ls -la dist && pwd && cd ..
     startCommand: cd server && npm start
     envVars:
       - key: NODE_ENV
