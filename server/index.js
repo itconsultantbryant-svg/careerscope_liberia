@@ -33,19 +33,31 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
+
+// CORS configuration
+// In production, if CLIENT_URL is not set, we serve from same origin so no CORS needed
+// Otherwise, use the specified CLIENT_URL
+const getCorsOrigin = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, if serving from same origin, we can be more permissive
+    // But it's better to set CLIENT_URL explicitly
+    return process.env.CLIENT_URL || true; // true allows same origin
+  }
+  return process.env.CLIENT_URL || 'http://localhost:5173';
+};
+
+const corsOptions = {
+  origin: getCorsOrigin(),
+  credentials: true,
+};
+
 const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
-  },
+  cors: corsOptions,
 });
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 app.use('/uploads', express.static(join(__dirname, '../uploads')));
@@ -71,6 +83,21 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/calls', callRoutes);
+
+// Serve static files from React app in production
+if (process.env.NODE_ENV === 'production') {
+  const clientPath = join(__dirname, '../../client/dist');
+  app.use(express.static(clientPath));
+  
+  // Handle React routing, return all requests to React app (except API routes)
+  app.get('*', (req, res, next) => {
+    // Don't serve React app for API routes
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(join(clientPath, 'index.html'));
+  });
+}
 
 // Socket.IO authentication middleware
 io.use((socket, next) => {
