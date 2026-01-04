@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import { initDatabase } from './db/init.js';
 import jwt from 'jsonwebtoken';
 import authRoutes from './routes/auth.js';
@@ -87,16 +88,38 @@ app.use('/api/calls', callRoutes);
 // Serve static files from React app in production
 if (process.env.NODE_ENV === 'production') {
   const clientPath = join(__dirname, '../../client/dist');
-  app.use(express.static(clientPath));
   
-  // Handle React routing, return all requests to React app (except API routes)
-  app.get('*', (req, res, next) => {
-    // Don't serve React app for API routes
-    if (req.path.startsWith('/api')) {
-      return next();
-    }
-    res.sendFile(join(clientPath, 'index.html'));
-  });
+  // Only serve static files if dist directory exists
+  if (existsSync(clientPath)) {
+    app.use(express.static(clientPath));
+    
+    // Handle React routing, return all requests to React app (except API routes)
+    app.get('*', (req, res, next) => {
+      // Don't serve React app for API routes
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      const indexPath = join(clientPath, 'index.html');
+      if (existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).json({ error: 'Client build not found. Please ensure the build completed successfully.' });
+      }
+    });
+  } else {
+    console.warn(`⚠️  Client build directory not found at ${clientPath}. Static files will not be served.`);
+    // Fallback: return a helpful message for non-API routes
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      res.status(503).json({ 
+        error: 'Client build not available',
+        message: 'The frontend build was not found. Please check the build process.',
+        apiHealth: '/api/health'
+      });
+    });
+  }
 }
 
 // Socket.IO authentication middleware
