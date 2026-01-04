@@ -1,12 +1,28 @@
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import bcrypt from 'bcrypt';
+import { careers as careersData } from './careers-data.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const dbPath = join(__dirname, '../../sqlite.db');
+// Use server directory for database (more reliable for deployment)
+// Prefer server directory, fallback to project root
+let dbPath = join(__dirname, '../sqlite.db'); // server/sqlite.db (preferred for deployment)
+
+// Ensure directory exists
+const dbDir = dirname(dbPath);
+if (!existsSync(dbDir)) {
+  try {
+    mkdirSync(dbDir, { recursive: true });
+  } catch (e) {
+    // If server directory doesn't work, try project root
+    dbPath = join(__dirname, '../../sqlite.db');
+  }
+}
+
 export const db = new Database(dbPath);
 
 // Enable foreign keys
@@ -551,33 +567,40 @@ export function initDatabase() {
     console.log('✅ Default test counselor user created');
   }
 
-  // Insert sample careers
+  // Insert comprehensive careers list (150 careers)
   const careersCount = db.prepare('SELECT COUNT(*) as count FROM careers').get();
   if (careersCount.count === 0) {
-    const careers = [
-      { title: 'Medicine', description: 'Become a doctor and serve your community', category: 'Healthcare', job_outlook: 'High demand in Liberia' },
-      { title: 'Engineering', description: 'Build infrastructure and technology solutions', category: 'Technology', job_outlook: 'Growing field' },
-      { title: 'Teaching', description: 'Educate the next generation', category: 'Education', job_outlook: 'Always needed' },
-      { title: 'Information Technology', description: 'Work with computers and software', category: 'Technology', job_outlook: 'Rapidly growing' },
-      { title: 'Agriculture', description: 'Improve food security and farming practices', category: 'Agriculture', job_outlook: 'Essential for Liberia' },
-      { title: 'Business', description: 'Start or manage businesses', category: 'Business', job_outlook: 'Entrepreneurial opportunities' },
-      { title: 'Law', description: 'Pursue justice and legal advocacy', category: 'Legal', job_outlook: 'Stable profession' },
-      { title: 'Nursing', description: 'Provide healthcare and support to patients', category: 'Healthcare', job_outlook: 'High demand' },
-    ];
-
     const insertCareer = db.prepare(`
-      INSERT INTO careers (title, description, category, job_outlook)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO careers (title, description, job_outlook, required_education, salary_range, skills_required, universities, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertMany = db.transaction((careers) => {
+      let added = 0;
       for (const career of careers) {
-        insertCareer.run(career.title, career.description, career.category, career.job_outlook);
+        try {
+          insertCareer.run(
+            career.title,
+            career.description,
+            career.job_outlook || null,
+            career.required_education || null,
+            career.salary_range || null,
+            career.skills_required || null,
+            career.universities || null,
+            career.category || null
+          );
+          added++;
+        } catch (error) {
+          console.error(`Error adding career "${career.title}":`, error.message);
+        }
       }
+      return added;
     });
 
-    insertMany(careers);
-    console.log('✅ Sample careers inserted');
+    const added = insertMany(careersData);
+    console.log(`✅ Successfully inserted ${added} careers into database`);
+  } else {
+    console.log(`✅ Careers already exist in database (${careersCount.count} careers)`);
   }
 
   // Insert sample career assessment quiz questions

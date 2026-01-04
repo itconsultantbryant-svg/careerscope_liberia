@@ -77,6 +77,15 @@ Make sure `CLIENT_URL` matches your actual Render app URL to avoid CORS issues.
 3. Verify the frontend loads correctly
 4. Test authentication and other features
 
+## Default Admin Credentials
+
+**Email:** `admin@careerscope.lib`  
+**Phone:** `0880000000`  
+**Password:** `Liberia2025!`  
+**Role:** Admin
+
+**Note:** The admin account is automatically created when the database is initialized. All 150 careers are also automatically seeded on first startup.
+
 ## Troubleshooting
 
 ### Build Fails
