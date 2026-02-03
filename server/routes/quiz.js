@@ -171,43 +171,22 @@ router.post('/career-assessment/submit', authenticate, (req, res) => {
       `).run(recommendedCategory, req.user.id);
     }
 
-    // Get recommended counselors based on matching career categories
+    // Get recommended counselors based on assigned career paths
     let recommendedCounselors = [];
-    if (topCategories.length > 0) {
-      // Build dynamic query based on number of categories
-      const searchTerms = [];
-      const placeholders = [];
-      
-      // Add category matches
-      topCategories.forEach(cat => {
-        searchTerms.push(`%${cat}%`);
-        placeholders.push('?');
-      });
-      
-      // Add General as fallback
-      searchTerms.push('%General%');
-      placeholders.push('?');
-      
-      // Build query with appropriate number of OR conditions
-      const conditions = placeholders.map(() => 'industry_specialty LIKE ?').join(' OR ');
-      
+    const recommendedCareerIds = recommendedCareers.map(c => c.id).filter(Boolean);
+    if (recommendedCareerIds.length > 0) {
+      const placeholders = recommendedCareerIds.map(() => '?').join(',');
       recommendedCounselors = db.prepare(`
-        SELECT * FROM users 
-        WHERE role = 'counselor' 
-        AND is_approved = 1 
-        AND (${conditions})
-        ORDER BY years_of_experience DESC
+        SELECT DISTINCT users.* FROM users
+        INNER JOIN counselor_career_paths
+          ON users.id = counselor_career_paths.counselor_id
+        WHERE users.role = 'counselor'
+        AND users.is_approved = 1
+        AND users.is_disabled = 0
+        AND counselor_career_paths.career_id IN (${placeholders})
+        ORDER BY users.years_of_experience DESC
         LIMIT 10
-      `).all(...searchTerms);
-    } else {
-      recommendedCounselors = db.prepare(`
-        SELECT * FROM users 
-        WHERE role = 'counselor' 
-        AND is_approved = 1 
-        AND industry_specialty LIKE ?
-        ORDER BY years_of_experience DESC
-        LIMIT 10
-      `).all('%General%');
+      `).all(...recommendedCareerIds);
     }
 
     // Ensure recommendedCareers is properly formatted

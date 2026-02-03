@@ -8,11 +8,38 @@ const router = express.Router();
 // Get all users
 router.get('/users', authenticate, requireRole('admin'), (req, res) => {
   const users = db.prepare(`
-    SELECT id, email, phone, first_name, last_name, gender, date_of_birth, county, school_name,
-           grade_level, role, qualification, years_of_experience, industry_specialty, organization,
-           bio, profile_image, is_approved, is_premium, is_disabled, created_at, updated_at
+    SELECT 
+      users.id,
+      users.email,
+      users.phone,
+      users.first_name,
+      users.last_name,
+      users.gender,
+      users.date_of_birth,
+      users.county,
+      users.school_name,
+      users.grade_level,
+      users.role,
+      users.qualification,
+      users.years_of_experience,
+      users.industry_specialty,
+      users.organization,
+      users.bio,
+      users.profile_image,
+      users.is_approved,
+      users.is_premium,
+      users.is_disabled,
+      users.created_at,
+      users.updated_at,
+      GROUP_CONCAT(counselor_career_paths.career_id) AS career_ids,
+      GROUP_CONCAT(careers.title) AS career_titles
     FROM users
-    ORDER BY created_at DESC
+    LEFT JOIN counselor_career_paths 
+      ON users.id = counselor_career_paths.counselor_id
+    LEFT JOIN careers 
+      ON counselor_career_paths.career_id = careers.id
+    GROUP BY users.id
+    ORDER BY users.created_at DESC
   `).all();
 
   res.json({ users });
@@ -33,6 +60,7 @@ router.post('/counselors', authenticate, requireRole('admin'), async (req, res) 
       organization,
       password,
       isApproved,
+      careerIds,
     } = req.body;
 
     if (!firstName || !lastName || !phone || !password) {
@@ -54,24 +82,42 @@ router.post('/counselors', authenticate, requireRole('admin'), async (req, res) 
     const hashedPassword = await bcrypt.hash(password, 10);
     const approvedValue = isApproved === undefined ? 1 : (isApproved ? 1 : 0);
 
-    const result = db.prepare(`
-      INSERT INTO users (first_name, last_name, phone, email, county, qualification, years_of_experience, industry_specialty, organization, password, role, is_approved)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'counselor', ?)
-    `).run(
-      firstName,
-      lastName,
-      phone,
-      email || null,
-      county || null,
-      qualification || null,
-      yearsOfExperience || null,
-      industrySpecialty || null,
-      organization || null,
-      hashedPassword,
-      approvedValue
-    );
+    const createCounselor = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO users (first_name, last_name, phone, email, county, qualification, years_of_experience, industry_specialty, organization, password, role, is_approved)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'counselor', ?)
+      `).run(
+        firstName,
+        lastName,
+        phone,
+        email || null,
+        county || null,
+        qualification || null,
+        yearsOfExperience || null,
+        industrySpecialty || null,
+        organization || null,
+        hashedPassword,
+        approvedValue
+      );
 
-    res.status(201).json({ message: 'Counselor created successfully', userId: result.lastInsertRowid });
+      const counselorId = result.lastInsertRowid;
+      if (Array.isArray(careerIds) && careerIds.length > 0) {
+        const insertCareerPath = db.prepare(`
+          INSERT OR IGNORE INTO counselor_career_paths (counselor_id, career_id)
+          VALUES (?, ?)
+        `);
+        careerIds.forEach((careerId) => {
+          if (careerId) {
+            insertCareerPath.run(counselorId, careerId);
+          }
+        });
+      }
+      return counselorId;
+    });
+
+    const counselorId = createCounselor();
+
+    res.status(201).json({ message: 'Counselor created successfully', userId: counselorId });
   } catch (error) {
     console.error('Create counselor error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -130,6 +176,7 @@ router.patch('/users/:id', authenticate, requireRole('admin'), async (req, res) 
       isApproved,
       isDisabled,
       password,
+      careerIds,
     } = req.body;
 
     if (phone) {
@@ -225,7 +272,32 @@ router.patch('/users/:id', authenticate, requireRole('admin'), async (req, res) 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(req.params.id);
 
-    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    const nextRole = role || targetUser.role;
+
+    const updateUser = db.transaction(() => {
+      db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+      if (nextRole === 'counselor') {
+        if (Array.isArray(careerIds)) {
+          db.prepare('DELETE FROM counselor_career_paths WHERE counselor_id = ?').run(req.params.id);
+          if (careerIds.length > 0) {
+            const insertCareerPath = db.prepare(`
+              INSERT OR IGNORE INTO counselor_career_paths (counselor_id, career_id)
+              VALUES (?, ?)
+            `);
+            careerIds.forEach((careerId) => {
+              if (careerId) {
+                insertCareerPath.run(req.params.id, careerId);
+              }
+            });
+          }
+        }
+      } else {
+        db.prepare('DELETE FROM counselor_career_paths WHERE counselor_id = ?').run(req.params.id);
+      }
+    });
+
+    updateUser();
 
     const updatedUser = db.prepare(`
       SELECT id, email, phone, first_name, last_name, gender, date_of_birth, county, school_name,

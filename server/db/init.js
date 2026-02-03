@@ -88,6 +88,19 @@ export function initDatabase() {
     )
   `);
 
+  // Counselor career paths (many-to-many)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS counselor_career_paths (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      counselor_id INTEGER NOT NULL,
+      career_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (counselor_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (career_id) REFERENCES careers(id) ON DELETE CASCADE,
+      UNIQUE(counselor_id, career_id)
+    )
+  `);
+
   // Student career interests (many-to-many)
   db.exec(`
     CREATE TABLE IF NOT EXISTS student_career_interests (

@@ -18,15 +18,18 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'Career not found' });
   }
 
-  // Get counselors for this career based on category match
+  // Get counselors assigned to this career
   const counselors = db.prepare(`
-    SELECT * FROM users 
-    WHERE role = 'counselor' 
-    AND is_approved = 1 
-    AND (industry_specialty LIKE ? OR industry_specialty LIKE ?)
-    ORDER BY years_of_experience DESC
+    SELECT users.* FROM users
+    INNER JOIN counselor_career_paths
+      ON users.id = counselor_career_paths.counselor_id
+    WHERE users.role = 'counselor'
+    AND users.is_approved = 1
+    AND users.is_disabled = 0
+    AND counselor_career_paths.career_id = ?
+    ORDER BY users.years_of_experience DESC
     LIMIT 20
-  `).all(`%${career.category}%`, '%General%');
+  `).all(career.id);
 
   res.json({ career, counselors });
 });

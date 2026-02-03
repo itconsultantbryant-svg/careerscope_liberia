@@ -59,6 +59,7 @@ export default function AdminDashboard() {
     organization: '',
     password: '',
     isApproved: true,
+    careerIds: [],
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -162,10 +163,14 @@ export default function AdminDashboard() {
   };
 
   const handleCreateCounselorChange = (event) => {
-    const { name, value, type, checked } = event.target;
+    const { name, value, type, checked, multiple, options } = event.target;
     setCreateCounselorData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: multiple
+        ? Array.from(options).filter((opt) => opt.selected).map((opt) => Number(opt.value))
+        : type === 'checkbox'
+          ? checked
+          : value,
     }));
   };
 
@@ -191,6 +196,7 @@ export default function AdminDashboard() {
         organization: '',
         password: '',
         isApproved: true,
+        careerIds: [],
       });
       fetchData();
     } catch (error) {
@@ -200,6 +206,9 @@ export default function AdminDashboard() {
   };
 
   const openUserModal = (targetUser) => {
+    const careerIds = targetUser.career_ids
+      ? targetUser.career_ids.split(',').map((id) => Number(id)).filter(Boolean)
+      : [];
     setSelectedUser(targetUser);
     setEditUserData({
       firstName: targetUser.first_name || '',
@@ -220,6 +229,7 @@ export default function AdminDashboard() {
       isApproved: Boolean(targetUser.is_approved),
       isDisabled: Boolean(targetUser.is_disabled),
       password: '',
+      careerIds,
     });
     setShowUserModal(true);
   };
@@ -231,10 +241,14 @@ export default function AdminDashboard() {
   };
 
   const handleEditUserChange = (event) => {
-    const { name, value, type, checked } = event.target;
+    const { name, value, type, checked, multiple, options } = event.target;
     setEditUserData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: multiple
+        ? Array.from(options).filter((opt) => opt.selected).map((opt) => Number(opt.value))
+        : type === 'checkbox'
+          ? checked
+          : value,
     }));
   };
 
@@ -246,6 +260,9 @@ export default function AdminDashboard() {
         gradeLevel: editUserData.gradeLevel === '' ? null : Number(editUserData.gradeLevel),
         yearsOfExperience: editUserData.yearsOfExperience === '' ? null : Number(editUserData.yearsOfExperience),
       };
+      if (payload.role !== 'counselor') {
+        delete payload.careerIds;
+      }
       if (!payload.password) {
         delete payload.password;
       }
@@ -1103,6 +1120,26 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Career Paths</label>
+                    <select
+                      name="careerIds"
+                      multiple
+                      value={createCounselorData.careerIds}
+                      onChange={handleCreateCounselorChange}
+                      className="input-field h-40"
+                    >
+                      {careers.map((career) => (
+                        <option key={career.id} value={career.id}>
+                          {career.title} {career.category ? `(${career.category})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Hold Ctrl (Windows) or Command (Mac) to select multiple careers.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Temporary Password *</label>
@@ -1602,6 +1639,12 @@ export default function AdminDashboard() {
                     <p>Updated: {new Date(selectedUser.updated_at).toLocaleString()}</p>
                   )}
                 </div>
+                {selectedUser.role === 'counselor' && (
+                  <div className="text-sm text-gray-600 md:col-span-2">
+                    <p className="font-medium text-gray-900">Assigned Career Paths</p>
+                    <p>{selectedUser.career_titles || 'None assigned'}</p>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1728,6 +1771,27 @@ export default function AdminDashboard() {
                     className="input-field"
                   />
                 </div>
+                {editUserData.role === 'counselor' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Career Paths</label>
+                    <select
+                      name="careerIds"
+                      multiple
+                      value={editUserData.careerIds}
+                      onChange={handleEditUserChange}
+                      className="input-field h-40"
+                    >
+                      {careers.map((career) => (
+                        <option key={career.id} value={career.id}>
+                          {career.title} {career.category ? `(${career.category})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Hold Ctrl (Windows) or Command (Mac) to select multiple careers.
+                    </p>
+                  </div>
+                )}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
                   <textarea
