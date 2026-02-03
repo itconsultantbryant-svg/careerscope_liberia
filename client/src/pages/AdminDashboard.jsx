@@ -103,7 +103,8 @@ export default function AdminDashboard() {
         api.get('/schedules/all'),
         api.get('/appointments/all'),
       ]);
-      setUsers(usersRes.data.users || []);
+      const fetchedUsers = usersRes.data.users || [];
+      setUsers(fetchedUsers);
       setStats(statsRes.data.stats || null);
       setReports(reportsRes.data.reports || []);
       setSessions(sessionsRes.data.sessions || []);
@@ -113,8 +114,8 @@ export default function AdminDashboard() {
       setAppointments(appointmentsRes.data.appointments || []);
 
       // Separate students and counselors
-      setStudents(users.filter(u => u.role === 'student'));
-      setCounselors(users.filter(u => u.role === 'counselor'));
+      setStudents(fetchedUsers.filter(u => u.role === 'student'));
+      setCounselors(fetchedUsers.filter(u => u.role === 'counselor'));
     } catch (error) {
       const errorMessage = error.response?.data?.error || error.message || 'Failed to load data';
       toast.error(errorMessage);
@@ -155,8 +156,35 @@ export default function AdminDashboard() {
   }
 
   const pendingCounselors = counselors.filter(c => !c.is_approved);
+  const approvedCounselorsCount = counselors.filter(c => c.is_approved).length;
+  const pendingCounselorsCount = pendingCounselors.length;
   const activeSessions = sessions.filter(s => s.status === 'active');
   const urgentReports = reports.filter(r => r.is_urgent && !r.admin_viewed);
+  const recentUsers = users.slice(0, 5);
+  const recentAppointments = appointments.slice(0, 5);
+  const recentReports = reports.slice(0, 5);
+  const completedAppointmentsCount = appointments.filter(a => a.status === 'completed').length;
+  const pendingAppointmentsCount = appointments.filter(a => a.status === 'pending').length;
+  const activeSchedulesCount = schedules.filter(
+    s => s.status === 'accepted' || s.status === 'active'
+  ).length;
+  const approvalRate = counselors.length
+    ? Math.round((approvedCounselorsCount / counselors.length) * 100)
+    : 0;
+  const appointmentCompletionRate = appointments.length
+    ? Math.round((completedAppointmentsCount / appointments.length) * 100)
+    : 0;
+  const urgentReportRate = reports.length
+    ? Math.round((urgentReports.length / reports.length) * 100)
+    : 0;
+  const countyCounts = users.reduce((acc, user) => {
+    if (!user.county) return acc;
+    acc[user.county] = (acc[user.county] || 0) + 1;
+    return acc;
+  }, {});
+  const topCounties = Object.entries(countyCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -334,7 +362,7 @@ export default function AdminDashboard() {
                 <Clock className="w-8 h-8 text-violet-600" />
               </div>
               <div>
-                <p className="text-3xl font-bold text-gray-900">{schedules.filter(s => s.status === 'accepted' || s.status === 'active').length}</p>
+                <p className="text-3xl font-bold text-gray-900">{activeSchedulesCount}</p>
                 <p className="text-gray-600">Active Schedules</p>
               </div>
             </div>
@@ -372,127 +400,333 @@ export default function AdminDashboard() {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-8">
-            {/* Pending Counselors */}
-            {pendingCounselors.length > 0 && (
-              <div className="card">
-                <h2 className="text-2xl font-bold mb-4 flex items-center space-x-2">
-                  <AlertCircle className="w-6 h-6 text-yellow-600" />
-                  <span>Pending Counselor Approvals</span>
-                </h2>
-                <div className="space-y-4">
-                  {pendingCounselors.map((counselor) => (
-                    <div key={counselor.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-lg">
-                            {counselor.first_name} {counselor.last_name}
-                          </p>
-                          <p className="text-sm text-gray-600">{counselor.county} County</p>
-                          <p className="text-sm text-gray-600">{counselor.phone}</p>
-                          {counselor.email && (
-                            <p className="text-sm text-gray-600">{counselor.email}</p>
-                          )}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                {/* Pending Counselors */}
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold flex items-center space-x-2">
+                      <AlertCircle className="w-6 h-6 text-yellow-600" />
+                      <span>Pending Counselor Approvals</span>
+                    </h2>
+                    <span className="text-sm text-gray-500">{pendingCounselorsCount} pending</span>
+                  </div>
+                  {pendingCounselors.length === 0 ? (
+                    <p className="text-sm text-gray-500">No pending counselor approvals right now.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {pendingCounselors.map((counselor) => (
+                        <div key={counselor.id} className="border rounded-lg p-4">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <p className="font-semibold text-lg">
+                                {counselor.first_name} {counselor.last_name}
+                              </p>
+                              <p className="text-sm text-gray-600">{counselor.county} County</p>
+                              <p className="text-sm text-gray-600">{counselor.phone}</p>
+                              {counselor.email && (
+                                <p className="text-sm text-gray-600">{counselor.email}</p>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => approveCounselor(counselor.id, true)}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                <span>Approve</span>
+                              </button>
+                              <button
+                                onClick={() => approveCounselor(counselor.id, false)}
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                <span>Reject</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => approveCounselor(counselor.id, true)}
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            <span>Approve</span>
-                          </button>
-                          <button
-                            onClick={() => approveCounselor(counselor.id, false)}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-                          >
-                            <XCircle className="w-4 h-4" />
-                            <span>Reject</span>
-                          </button>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                </div>
+
+                {/* Urgent Reports */}
+                {urgentReports.length > 0 && (
+                  <div className="card">
+                    <h2 className="text-2xl font-bold mb-4 flex items-center space-x-2">
+                      <AlertCircle className="w-6 h-6 text-red-600" />
+                      <span>Urgent Reports</span>
+                    </h2>
+                    <div className="space-y-4">
+                      {urgentReports.map((report) => (
+                        <div
+                          key={report.id}
+                          className="border-l-4 border-red-500 bg-red-50 rounded-lg p-4"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h3 className="font-semibold text-lg">{report.title}</h3>
+                              <p className="text-sm text-gray-600">
+                                From: {report.counselor_name} • Student: {report.student_name}
+                              </p>
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {new Date(report.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-gray-700">{report.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Sessions */}
+                {activeSessions.length > 0 && (
+                  <div className="card">
+                    <h2 className="text-2xl font-bold mb-4">Active Live Sessions</h2>
+                    <div className="space-y-3">
+                      {activeSessions.map((session) => (
+                        <div key={session.id} className="border rounded-lg p-4 bg-green-50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-semibold">{session.session_title}</p>
+                              <p className="text-sm text-gray-600">
+                                {session.student_name} with {session.counselor_name}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Started: {new Date(session.start_time).toLocaleString()}
+                              </p>
+                            </div>
+                            <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full">
+                              Active
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin Quick Actions */}
+                <div className="card">
+                  <h2 className="text-2xl font-bold mb-4">Admin Quick Actions</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { label: 'Review Users', path: '/admin/users' },
+                      { label: 'Manage Appointments', path: '/admin/appointments' },
+                      { label: 'Check Schedules', path: '/admin/schedules' },
+                      { label: 'View Reports', path: '/admin/reports' },
+                      { label: 'Live Sessions', path: '/admin/sessions' },
+                      { label: 'Careers Library', path: '/admin/careers' },
+                    ].map((item) => (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className="border rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:border-primary-600 hover:text-primary-700 transition-colors"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Urgent Reports */}
-            {urgentReports.length > 0 && (
-              <div className="card">
-                <h2 className="text-2xl font-bold mb-4 flex items-center space-x-2">
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                  <span>Urgent Reports</span>
-                </h2>
-                <div className="space-y-4">
-                  {urgentReports.map((report) => (
-                    <div
-                      key={report.id}
-                      className="border-l-4 border-red-500 bg-red-50 rounded-lg p-4"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-semibold text-lg">{report.title}</h3>
-                          <p className="text-sm text-gray-600">
-                            From: {report.counselor_name} • Student: {report.student_name}
-                          </p>
-                        </div>
-                        <span className="text-xs text-gray-500">
-                          {new Date(report.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-gray-700">{report.content}</p>
+              <div className="space-y-6">
+                {/* System Snapshot */}
+                <div className="card">
+                  <h2 className="text-2xl font-bold mb-4">System Snapshot</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-600">
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-400">Users</p>
+                      <p className="text-lg font-semibold text-gray-900">{users.length}</p>
+                      <p className="text-xs text-gray-500">Students: {students.length} • Counselors: {counselors.length}</p>
                     </div>
-                  ))}
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-400">Approvals</p>
+                      <p className="text-lg font-semibold text-gray-900">{approvedCounselorsCount}</p>
+                      <p className="text-xs text-gray-500">Pending: {pendingCounselorsCount}</p>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-400">Appointments</p>
+                      <p className="text-lg font-semibold text-gray-900">{appointments.length}</p>
+                      <p className="text-xs text-gray-500">Pending: {pendingAppointmentsCount} • Completed: {completedAppointmentsCount}</p>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-400">Reports</p>
+                      <p className="text-lg font-semibold text-gray-900">{reports.length}</p>
+                      <p className="text-xs text-gray-500">Urgent: {urgentReports.length}</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Active Sessions */}
-            {activeSessions.length > 0 && (
-              <div className="card">
-                <h2 className="text-2xl font-bold mb-4">Active Live Sessions</h2>
-                <div className="space-y-3">
-                  {activeSessions.map((session) => (
-                    <div key={session.id} className="border rounded-lg p-4 bg-green-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold">{session.session_title}</p>
-                          <p className="text-sm text-gray-600">
-                            {session.student_name} with {session.counselor_name}
-                          </p>
+                {/* Operational Health */}
+                <div className="card">
+                  <h2 className="text-2xl font-bold mb-4">Operational Health</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                        <span>Counselor approvals</span>
+                        <span>{approvalRate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div className="bg-green-500 h-2 rounded-full" style={{ width: `${approvalRate}%` }}></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                        <span>Appointments completed</span>
+                        <span>{appointmentCompletionRate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${appointmentCompletionRate}%` }}></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                        <span>Urgent report share</span>
+                        <span>{urgentReportRate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div className="bg-red-500 h-2 rounded-full" style={{ width: `${urgentReportRate}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Counties */}
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold">Top Counties</h2>
+                    <span className="text-sm text-gray-500">User distribution</span>
+                  </div>
+                  {topCounties.length === 0 ? (
+                    <p className="text-sm text-gray-500">No county data available.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {topCounties.map(([county, count]) => (
+                        <div key={county} className="flex items-center justify-between border rounded-lg p-3">
+                          <p className="font-semibold">{county}</p>
+                          <span className="text-sm text-gray-600">{count} users</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent Users */}
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold">Recent Users</h2>
+                    <span className="text-sm text-gray-500">Latest signups</span>
+                  </div>
+                  {recentUsers.length === 0 ? (
+                    <p className="text-sm text-gray-500">No new users yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentUsers.map((recentUser) => (
+                        <div key={recentUser.id} className="flex items-center justify-between border rounded-lg p-3">
+                          <div>
+                            <p className="font-semibold">
+                              {recentUser.first_name} {recentUser.last_name}
+                            </p>
+                            <p className="text-sm text-gray-600">{recentUser.email || recentUser.phone || 'No contact'}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs rounded capitalize">
+                              {recentUser.role}
+                            </span>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {new Date(recentUser.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent Appointments */}
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold">Recent Appointments</h2>
+                    <span className="text-sm text-gray-500">Latest 5 bookings</span>
+                  </div>
+                  {recentAppointments.length === 0 ? (
+                    <p className="text-sm text-gray-500">No appointments scheduled.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentAppointments.map((apt) => (
+                        <div key={apt.id} className="flex items-center justify-between border rounded-lg p-3">
+                          <div>
+                            <p className="font-semibold">{apt.student_name}</p>
+                            <p className="text-sm text-gray-600">
+                              {apt.counselor_name} • {apt.appointment_date} at {apt.appointment_time}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            apt.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                            apt.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            apt.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {apt.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent Reports */}
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold">Recent Reports</h2>
+                    <span className="text-sm text-gray-500">Latest 5 submissions</span>
+                  </div>
+                  {recentReports.length === 0 ? (
+                    <p className="text-sm text-gray-500">No reports submitted yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentReports.map((report) => (
+                        <div key={report.id} className="border rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold">{report.title}</p>
+                            {report.is_urgent && (
+                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded">Urgent</span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">
-                            Started: {new Date(session.start_time).toLocaleString()}
+                            {report.counselor_name} • {new Date(report.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full">
-                          Active
-                        </span>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
 
-            {/* Popular Careers */}
-            {stats?.popularCareers && stats.popularCareers.length > 0 && (
-              <div className="card">
-                <h2 className="text-2xl font-bold mb-4">Most Popular Careers</h2>
-                <div className="space-y-2">
-                  {stats.popularCareers.slice(0, 10).map((career, index) => (
-                    <div key={career.title} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-2xl font-bold text-primary-600">{index + 1}</span>
-                        <div>
-                          <p className="font-semibold">{career.title}</p>
-                          <p className="text-sm text-gray-600">{career.interest_count} students interested</p>
+                {/* Popular Careers */}
+                {stats?.popularCareers && stats.popularCareers.length > 0 && (
+                  <div className="card">
+                    <h2 className="text-2xl font-bold mb-4">Most Popular Careers</h2>
+                    <div className="space-y-2">
+                      {stats.popularCareers.slice(0, 10).map((career, index) => (
+                        <div key={career.title} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-2xl font-bold text-primary-600">{index + 1}</span>
+                            <div>
+                              <p className="font-semibold">{career.title}</p>
+                              <p className="text-sm text-gray-600">{career.interest_count} students interested</p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 

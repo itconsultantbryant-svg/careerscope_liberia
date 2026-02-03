@@ -35,11 +35,11 @@ export default function Footer() {
               </div>
               <div className="flex items-center space-x-2">
                 <MessageCircle className="w-5 h-5" />
-                <span>WhatsApp: +231 77 000 0000</span>
+                <span>WhatsApp: +231775592486</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="w-5 h-5" />
-                <span>info@careerscope.lib</span>
+                <span>careerscopee@gmail.com</span>
               </div>
             </div>
           </div>
