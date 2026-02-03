@@ -26,6 +26,12 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+const counties = [
+  'Montserrado', 'Grand Bassa', 'Lofa', 'Nimba', 'Bong', 'Grand Cape Mount',
+  'Grand Gedeh', 'Grand Kru', 'Gbarpolu', 'Margibi', 'Maryland', 'River Cess',
+  'River Gee', 'Sinoe', 'Bomi'
+];
+
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
@@ -41,6 +47,26 @@ export default function AdminDashboard() {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [createCounselorData, setCreateCounselorData] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    email: '',
+    county: '',
+    qualification: '',
+    yearsOfExperience: '',
+    industrySpecialty: '',
+    organization: '',
+    password: '',
+    isApproved: true,
+  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [disabledFilter, setDisabledFilter] = useState('all');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [editUserData, setEditUserData] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
   
   // Determine active tab from URL
   const getActiveTab = () => {
@@ -135,6 +161,202 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateCounselorChange = (event) => {
+    const { name, value, type, checked } = event.target;
+    setCreateCounselorData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  const handleCreateCounselor = async (event) => {
+    event.preventDefault();
+    try {
+      await api.post('/admin/counselors', {
+        ...createCounselorData,
+        yearsOfExperience: createCounselorData.yearsOfExperience
+          ? Number(createCounselorData.yearsOfExperience)
+          : null,
+      });
+      toast.success('Counselor created successfully');
+      setCreateCounselorData({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        email: '',
+        county: '',
+        qualification: '',
+        yearsOfExperience: '',
+        industrySpecialty: '',
+        organization: '',
+        password: '',
+        isApproved: true,
+      });
+      fetchData();
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to create counselor';
+      toast.error(message);
+    }
+  };
+
+  const openUserModal = (targetUser) => {
+    setSelectedUser(targetUser);
+    setEditUserData({
+      firstName: targetUser.first_name || '',
+      lastName: targetUser.last_name || '',
+      email: targetUser.email || '',
+      phone: targetUser.phone || '',
+      gender: targetUser.gender || '',
+      dateOfBirth: targetUser.date_of_birth || '',
+      county: targetUser.county || '',
+      schoolName: targetUser.school_name || '',
+      gradeLevel: targetUser.grade_level ?? '',
+      qualification: targetUser.qualification || '',
+      yearsOfExperience: targetUser.years_of_experience ?? '',
+      industrySpecialty: targetUser.industry_specialty || '',
+      organization: targetUser.organization || '',
+      bio: targetUser.bio || '',
+      role: targetUser.role || 'student',
+      isApproved: Boolean(targetUser.is_approved),
+      isDisabled: Boolean(targetUser.is_disabled),
+      password: '',
+    });
+    setShowUserModal(true);
+  };
+
+  const closeUserModal = () => {
+    setSelectedUser(null);
+    setEditUserData(null);
+    setShowUserModal(false);
+  };
+
+  const handleEditUserChange = (event) => {
+    const { name, value, type, checked } = event.target;
+    setEditUserData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser || !editUserData) return;
+    try {
+      const payload = {
+        ...editUserData,
+        gradeLevel: editUserData.gradeLevel === '' ? null : Number(editUserData.gradeLevel),
+        yearsOfExperience: editUserData.yearsOfExperience === '' ? null : Number(editUserData.yearsOfExperience),
+      };
+      if (!payload.password) {
+        delete payload.password;
+      }
+      await api.patch(`/admin/users/${selectedUser.id}`, payload);
+      toast.success('User updated successfully');
+      fetchData();
+      closeUserModal();
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to update user';
+      toast.error(message);
+    }
+  };
+
+  const handleToggleDisable = async (targetUser) => {
+    if (targetUser.role === 'admin') {
+      toast.error('Admin accounts cannot be disabled');
+      return;
+    }
+    const nextDisabled = !targetUser.is_disabled;
+    const confirmMessage = nextDisabled
+      ? 'Disable this user account?'
+      : 'Enable this user account?';
+    if (!window.confirm(confirmMessage)) return;
+    try {
+      await api.patch(`/admin/users/${targetUser.id}`, { isDisabled: nextDisabled });
+      toast.success(nextDisabled ? 'User disabled' : 'User enabled');
+      fetchData();
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to update user status';
+      toast.error(message);
+    }
+  };
+
+  const handleDeleteUser = async (targetUser) => {
+    if (targetUser.role === 'admin') {
+      toast.error('Admin accounts cannot be deleted');
+      return;
+    }
+    if (!window.confirm(`Delete ${targetUser.first_name} ${targetUser.last_name}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/admin/users/${targetUser.id}`);
+      toast.success('User deleted');
+      fetchData();
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to delete user';
+      toast.error(message);
+    }
+  };
+
+  const handleExportUsers = async () => {
+    try {
+      const response = await api.get('/admin/export/users');
+      const exportUsers = response.data.users || [];
+      if (exportUsers.length === 0) {
+        toast.info('No users to export');
+        return;
+      }
+
+      const headers = [
+        'first_name',
+        'last_name',
+        'email',
+        'phone',
+        'role',
+        'county',
+        'school_name',
+        'grade_level',
+        'created_at',
+      ];
+
+      const escapeValue = (value) => {
+        if (value === null || value === undefined) return '';
+        const stringValue = String(value);
+        if (stringValue.includes('"') || stringValue.includes(',') || stringValue.includes('\n')) {
+          return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        return stringValue;
+      };
+
+      const rows = [
+        headers.join(','),
+        ...exportUsers.map((userItem) =>
+          headers.map((key) => escapeValue(userItem[key])).join(',')
+        ),
+      ];
+
+      const csvBlob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(csvBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `careerscope_users_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Users exported');
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to export users';
+      toast.error(message);
+    }
+  };
+
+  const resetUserFilters = () => {
+    setSearchTerm('');
+    setRoleFilter('all');
+    setStatusFilter('all');
+    setDisabledFilter('all');
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -155,8 +377,8 @@ export default function AdminDashboard() {
     );
   }
 
-  const pendingCounselors = counselors.filter(c => !c.is_approved);
-  const approvedCounselorsCount = counselors.filter(c => c.is_approved).length;
+  const pendingCounselors = counselors.filter(c => !c.is_approved && !c.is_disabled);
+  const approvedCounselorsCount = counselors.filter(c => c.is_approved && !c.is_disabled).length;
   const pendingCounselorsCount = pendingCounselors.length;
   const activeSessions = sessions.filter(s => s.status === 'active');
   const urgentReports = reports.filter(r => r.is_urgent && !r.admin_viewed);
@@ -185,6 +407,38 @@ export default function AdminDashboard() {
   const topCounties = Object.entries(countyCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
+  const baseUserList = activeTab === 'students'
+    ? students
+    : activeTab === 'counselors'
+      ? counselors
+      : users;
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredUsers = baseUserList.filter((userItem) => {
+    const matchesSearch = normalizedSearch
+      ? [
+          userItem.first_name,
+          userItem.last_name,
+          userItem.email,
+          userItem.phone,
+          userItem.county,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+      : true;
+
+    const matchesRole = roleFilter === 'all' || userItem.role === roleFilter;
+    const matchesStatus = statusFilter === 'all'
+      || (statusFilter === 'approved' && userItem.is_approved)
+      || (statusFilter === 'pending' && !userItem.is_approved);
+    const matchesDisabled = disabledFilter === 'all'
+      || (disabledFilter === 'enabled' && !userItem.is_disabled)
+      || (disabledFilter === 'disabled' && userItem.is_disabled);
+
+    return matchesSearch
+      && (activeTab === 'users' ? matchesRole : true)
+      && matchesStatus
+      && matchesDisabled;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -733,47 +987,304 @@ export default function AdminDashboard() {
         {/* Users Tab */}
         {(activeTab === 'users' || activeTab === 'students' || activeTab === 'counselors') && (
           <div className="space-y-8">
+            {(activeTab === 'counselors' || activeTab === 'users') && (
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-bold">Add Counselor</h2>
+                  <span className="text-sm text-gray-500">Admin-created accounts</span>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Counselors are created by admins and receive login credentials. Phone or email can be used to log in.
+                </p>
+                <form onSubmit={handleCreateCounselor} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                      <input
+                        name="firstName"
+                        value={createCounselorData.firstName}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                      <input
+                        name="lastName"
+                        value={createCounselorData.lastName}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
+                      <input
+                        name="phone"
+                        value={createCounselorData.phone}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                        placeholder="077xxxxxxx or 088xxxxxxx"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                      <input
+                        name="email"
+                        type="email"
+                        value={createCounselorData.email}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">County</label>
+                    <select
+                      name="county"
+                      value={createCounselorData.county}
+                      onChange={handleCreateCounselorChange}
+                      className="input-field"
+                    >
+                      <option value="">Select County</option>
+                      {counties.map((county) => (
+                        <option key={county} value={county}>{county}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Qualification</label>
+                      <input
+                        name="qualification"
+                        value={createCounselorData.qualification}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</label>
+                      <input
+                        name="yearsOfExperience"
+                        type="number"
+                        min="0"
+                        value={createCounselorData.yearsOfExperience}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Industry/Specialty</label>
+                      <input
+                        name="industrySpecialty"
+                        value={createCounselorData.industrySpecialty}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Organization</label>
+                      <input
+                        name="organization"
+                        value={createCounselorData.organization}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Temporary Password *</label>
+                      <input
+                        name="password"
+                        type="password"
+                        value={createCounselorData.password}
+                        onChange={handleCreateCounselorChange}
+                        className="input-field"
+                        required
+                      />
+                    </div>
+                    <label className="flex items-center space-x-2 text-sm text-gray-600">
+                      <input
+                        name="isApproved"
+                        type="checkbox"
+                        checked={createCounselorData.isApproved}
+                        onChange={handleCreateCounselorChange}
+                        className="rounded border-gray-300"
+                      />
+                      <span>Approve immediately</span>
+                    </label>
+                  </div>
+
+                  <button type="submit" className="btn-primary">
+                    Create Counselor
+                  </button>
+                </form>
+              </div>
+            )}
+
             <div className="card">
-              <h2 className="text-2xl font-bold mb-4">
-                {activeTab === 'students' && 'All Students'}
-                {activeTab === 'counselors' && 'All Counselors'}
-                {activeTab === 'users' && 'All Users'}
-              </h2>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {activeTab === 'students' && 'All Students'}
+                    {activeTab === 'counselors' && 'All Counselors'}
+                    {activeTab === 'users' && 'All Users'}
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Showing {filteredUsers.length} of {baseUserList.length} users
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={fetchData}
+                    className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={handleExportUsers}
+                    className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="input-field"
+                  placeholder="Search by name, email, phone, county"
+                />
+                {activeTab === 'users' && (
+                  <select
+                    value={roleFilter}
+                    onChange={(event) => setRoleFilter(event.target.value)}
+                    className="input-field"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="student">Students</option>
+                    <option value="counselor">Counselors</option>
+                    <option value="admin">Admins</option>
+                  </select>
+                )}
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                  className="input-field"
+                >
+                  <option value="all">All Approval Status</option>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
+                </select>
+                <select
+                  value={disabledFilter}
+                  onChange={(event) => setDisabledFilter(event.target.value)}
+                  className="input-field"
+                >
+                  <option value="all">All Account Status</option>
+                  <option value="enabled">Enabled</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+                <button
+                  onClick={resetUserFilters}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  Reset Filters
+                </button>
+              </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-3 px-4">Name</th>
                     <th className="text-left py-3 px-4">Role</th>
+                    <th className="text-left py-3 px-4">Contact</th>
                     <th className="text-left py-3 px-4">County</th>
                     <th className="text-left py-3 px-4">School/Organization</th>
                     <th className="text-left py-3 px-4">Status</th>
                     <th className="text-left py-3 px-4">Joined</th>
+                    <th className="text-left py-3 px-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(activeTab === 'students' ? students : activeTab === 'counselors' ? counselors : users).map((u) => (
-                    <tr key={u.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4">{u.first_name} {u.last_name}</td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs rounded capitalize">
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">{u.county || '-'}</td>
-                      <td className="py-3 px-4">{u.school_name || u.organization || '-'}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          u.is_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {u.is_approved ? 'Approved' : 'Pending'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {new Date(u.created_at).toLocaleDateString()}
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="py-6 text-center text-gray-500">
+                        No users match the current filters.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <tr key={u.id} className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-4">{u.first_name} {u.last_name}</td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs rounded capitalize">
+                            {u.role}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {u.email || u.phone || '-'}
+                        </td>
+                        <td className="py-3 px-4">{u.county || '-'}</td>
+                        <td className="py-3 px-4">{u.school_name || u.organization || '-'}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-1">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              u.is_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {u.is_approved ? 'Approved' : 'Pending'}
+                            </span>
+                            {u.is_disabled && (
+                              <span className="px-2 py-1 rounded text-xs bg-red-100 text-red-800">
+                                Disabled
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {new Date(u.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => openUserModal(u)}
+                              className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            >
+                              View/Edit
+                            </button>
+                            <button
+                              onClick={() => handleToggleDisable(u)}
+                              className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              disabled={u.role === 'admin'}
+                            >
+                              {u.is_disabled ? 'Enable' : 'Disable'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="px-3 py-1 text-xs rounded bg-red-100 text-red-800 hover:bg-red-200"
+                              disabled={u.role === 'admin'}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1061,6 +1572,218 @@ export default function AdminDashboard() {
               }
             }}
           />
+        )}
+
+        {showUserModal && selectedUser && editUserData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">User Details</h2>
+                  <p className="text-sm text-gray-500">
+                    {selectedUser.first_name} {selectedUser.last_name} • {selectedUser.role}
+                  </p>
+                </div>
+                <button onClick={closeUserModal} className="text-gray-500 hover:text-gray-700">
+                  Close
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="text-sm text-gray-600">
+                  <p className="font-medium text-gray-900">Contact</p>
+                  <p>{selectedUser.email || '-'}</p>
+                  <p>{selectedUser.phone || '-'}</p>
+                </div>
+                <div className="text-sm text-gray-600">
+                  <p className="font-medium text-gray-900">Account</p>
+                  <p>Created: {new Date(selectedUser.created_at).toLocaleString()}</p>
+                  {selectedUser.updated_at && (
+                    <p>Updated: {new Date(selectedUser.updated_at).toLocaleString()}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                  <input
+                    name="firstName"
+                    value={editUserData.firstName}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                  <input
+                    name="lastName"
+                    value={editUserData.lastName}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    name="email"
+                    type="email"
+                    value={editUserData.email}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                  <input
+                    name="phone"
+                    value={editUserData.phone}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">County</label>
+                  <select
+                    name="county"
+                    value={editUserData.county}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  >
+                    <option value="">Select County</option>
+                    {counties.map((county) => (
+                      <option key={county} value={county}>{county}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                  <select
+                    name="role"
+                    value={editUserData.role}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                    disabled={selectedUser.role === 'admin'}
+                  >
+                    <option value="student">Student</option>
+                    <option value="counselor">Counselor</option>
+                    {selectedUser.role === 'admin' && <option value="admin">Admin</option>}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">School Name</label>
+                  <input
+                    name="schoolName"
+                    value={editUserData.schoolName}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Grade Level</label>
+                  <input
+                    name="gradeLevel"
+                    type="number"
+                    min="1"
+                    value={editUserData.gradeLevel}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Qualification</label>
+                  <input
+                    name="qualification"
+                    value={editUserData.qualification}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</label>
+                  <input
+                    name="yearsOfExperience"
+                    type="number"
+                    min="0"
+                    value={editUserData.yearsOfExperience}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Industry/Specialty</label>
+                  <input
+                    name="industrySpecialty"
+                    value={editUserData.industrySpecialty}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Organization</label>
+                  <input
+                    name="organization"
+                    value={editUserData.organization}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+                  <textarea
+                    name="bio"
+                    value={editUserData.bio}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                    rows="3"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Reset Password</label>
+                  <input
+                    name="password"
+                    type="password"
+                    value={editUserData.password}
+                    onChange={handleEditUserChange}
+                    className="input-field"
+                    placeholder="Leave blank to keep current password"
+                  />
+                </div>
+                <div className="flex items-center space-x-4 md:col-span-2">
+                  <label className="flex items-center space-x-2 text-sm text-gray-600">
+                    <input
+                      name="isApproved"
+                      type="checkbox"
+                      checked={editUserData.isApproved}
+                      onChange={handleEditUserChange}
+                      className="rounded border-gray-300"
+                    />
+                    <span>Approved</span>
+                  </label>
+                  <label className="flex items-center space-x-2 text-sm text-gray-600">
+                    <input
+                      name="isDisabled"
+                      type="checkbox"
+                      checked={editUserData.isDisabled}
+                      onChange={handleEditUserChange}
+                      className="rounded border-gray-300"
+                      disabled={selectedUser.role === 'admin'}
+                    />
+                    <span>Disabled</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button onClick={closeUserModal} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600">
+                  Cancel
+                </button>
+                <button onClick={handleUpdateUser} className="btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

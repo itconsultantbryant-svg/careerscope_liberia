@@ -91,61 +91,9 @@ router.post('/register/student', async (req, res) => {
   }
 });
 
-// Register Counselor
-router.post('/register/counselor', async (req, res) => {
-  try {
-    const {
-      firstName,
-      lastName,
-      gender,
-      dateOfBirth,
-      phone,
-      email,
-      county,
-      qualification,
-      yearsOfExperience,
-      industrySpecialty,
-      organization,
-      password,
-    } = req.body;
-
-    if (!firstName || !lastName || !phone || !password || !county) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const existingUser = db.prepare('SELECT id FROM users WHERE phone = ?').get(phone);
-    if (existingUser) {
-      return res.status(400).json({ error: 'Phone number already registered' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = db.prepare(`
-      INSERT INTO users (first_name, last_name, gender, date_of_birth, phone, email, county, qualification, years_of_experience, industry_specialty, organization, password, role, is_approved)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'counselor', 0)
-    `).run(
-      firstName,
-      lastName,
-      gender || null,
-      dateOfBirth || null,
-      phone,
-      email || null,
-      county,
-      qualification || null,
-      yearsOfExperience || null,
-      industrySpecialty || null,
-      organization || null,
-      hashedPassword
-    );
-
-    res.status(201).json({ 
-      message: 'Counselor registration submitted. Awaiting admin approval.',
-      userId: result.lastInsertRowid 
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+// Register Counselor (disabled - counselors must be created by admin)
+router.post('/register/counselor', (req, res) => {
+  res.status(403).json({ error: 'Counselor registration is disabled. Please contact an admin.' });
 });
 
 // Login
@@ -172,6 +120,11 @@ router.post('/login', loginLimiter, async (req, res) => {
     // Check role if specified
     if (role && user.role !== role) {
       return res.status(401).json({ error: 'Invalid role' });
+    }
+
+    // Check if user is disabled
+    if (user.is_disabled) {
+      return res.status(403).json({ error: 'Your account has been disabled. Please contact an admin.' });
     }
 
     // Check if counselor is approved

@@ -120,7 +120,7 @@ router.put('/profile', authenticate, upload.single('profileImage'), (req, res) =
 router.get('/students/list', authenticate, (req, res) => {
   const students = db.prepare(`
     SELECT id, first_name, last_name, school_name, grade_level, county, profile_image
-    FROM users WHERE role = 'student' AND is_approved = 1
+    FROM users WHERE role = 'student' AND is_approved = 1 AND is_disabled = 0
     ORDER BY created_at DESC
   `).all();
 
@@ -132,7 +132,7 @@ router.get('/counselors/list', authenticate, (req, res) => {
   const counselors = db.prepare(`
     SELECT id, first_name, last_name, county, qualification, years_of_experience, 
            industry_specialty, organization, bio, profile_image
-    FROM users WHERE role = 'counselor' AND is_approved = 1
+    FROM users WHERE role = 'counselor' AND is_approved = 1 AND is_disabled = 0
     ORDER BY created_at DESC
   `).all();
 

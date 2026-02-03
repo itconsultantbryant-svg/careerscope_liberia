@@ -52,10 +52,24 @@ export function initDatabase() {
       profile_image TEXT,
       is_approved BOOLEAN DEFAULT 0,
       is_premium BOOLEAN DEFAULT 0,
+      is_disabled BOOLEAN DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add missing columns to users table if needed
+  try {
+    const userColumns = db.prepare("PRAGMA table_info(users)").all();
+    const userColumnNames = userColumns.map(col => col.name);
+
+    if (!userColumnNames.includes('is_disabled')) {
+      console.log('Adding is_disabled column to users...');
+      db.exec("ALTER TABLE users ADD COLUMN is_disabled BOOLEAN DEFAULT 0");
+    }
+  } catch (error) {
+    console.error('Users migration error:', error.message);
+  }
 
   // Careers table
   db.exec(`
