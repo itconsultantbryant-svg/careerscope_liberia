@@ -65,9 +65,12 @@ export default function AdminDashboard() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [disabledFilter, setDisabledFilter] = useState('all');
+  const [careerFilter, setCareerFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState(null);
   const [editUserData, setEditUserData] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [counselorStudents, setCounselorStudents] = useState([]);
+  const [loadingCounselorStudents, setLoadingCounselorStudents] = useState(false);
   
   // Determine active tab from URL
   const getActiveTab = () => {
@@ -108,6 +111,12 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   }, [user, authLoading]);
+
+  useEffect(() => {
+    if (showUserModal && selectedUser?.role === 'counselor') {
+      fetchCounselorStudents(selectedUser.id);
+    }
+  }, [showUserModal, selectedUser]);
 
   const fetchData = async () => {
     try {
@@ -210,6 +219,7 @@ export default function AdminDashboard() {
       ? targetUser.career_ids.split(',').map((id) => Number(id)).filter(Boolean)
       : [];
     setSelectedUser(targetUser);
+    setCounselorStudents([]);
     setEditUserData({
       firstName: targetUser.first_name || '',
       lastName: targetUser.last_name || '',
@@ -238,6 +248,7 @@ export default function AdminDashboard() {
     setSelectedUser(null);
     setEditUserData(null);
     setShowUserModal(false);
+    setCounselorStudents([]);
   };
 
   const handleEditUserChange = (event) => {
@@ -314,6 +325,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchCounselorStudents = async (counselorId) => {
+    setLoadingCounselorStudents(true);
+    try {
+      const res = await api.get(`/admin/counselors/${counselorId}/students`);
+      setCounselorStudents(res.data.students || []);
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to load counselor students';
+      toast.error(message);
+      setCounselorStudents([]);
+    } finally {
+      setLoadingCounselorStudents(false);
+    }
+  };
+
   const handleExportUsers = async () => {
     try {
       const response = await api.get('/admin/export/users');
@@ -372,6 +397,7 @@ export default function AdminDashboard() {
     setRoleFilter('all');
     setStatusFilter('all');
     setDisabledFilter('all');
+    setCareerFilter('all');
   };
 
   if (authLoading || loading) {
@@ -431,6 +457,9 @@ export default function AdminDashboard() {
       : users;
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredUsers = baseUserList.filter((userItem) => {
+    const careerIdList = userItem.career_ids
+      ? userItem.career_ids.split(',').map((id) => Number(id)).filter(Boolean)
+      : [];
     const matchesSearch = normalizedSearch
       ? [
           userItem.first_name,
@@ -450,11 +479,14 @@ export default function AdminDashboard() {
     const matchesDisabled = disabledFilter === 'all'
       || (disabledFilter === 'enabled' && !userItem.is_disabled)
       || (disabledFilter === 'disabled' && userItem.is_disabled);
+    const matchesCareer = careerFilter === 'all'
+      || (userItem.role === 'counselor' && careerIdList.includes(Number(careerFilter)));
 
     return matchesSearch
       && (activeTab === 'users' ? matchesRole : true)
       && matchesStatus
-      && matchesDisabled;
+      && matchesDisabled
+      && matchesCareer;
   });
 
   return (
@@ -1129,11 +1161,15 @@ export default function AdminDashboard() {
                       onChange={handleCreateCounselorChange}
                       className="input-field h-40"
                     >
-                      {careers.map((career) => (
-                        <option key={career.id} value={career.id}>
-                          {career.title} {career.category ? `(${career.category})` : ''}
-                        </option>
-                      ))}
+                      {careers.length === 0 ? (
+                        <option value="" disabled>No careers available</option>
+                      ) : (
+                        careers.map((career) => (
+                          <option key={career.id} value={career.id}>
+                            {career.title} {career.category ? `(${career.category})` : ''}
+                          </option>
+                        ))
+                      )}
                     </select>
                     <p className="text-xs text-gray-500 mt-2">
                       Hold Ctrl (Windows) or Command (Mac) to select multiple careers.
@@ -1199,7 +1235,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
                 <input
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
@@ -1228,6 +1264,18 @@ export default function AdminDashboard() {
                   <option value="pending">Pending</option>
                 </select>
                 <select
+                  value={careerFilter}
+                  onChange={(event) => setCareerFilter(event.target.value)}
+                  className="input-field"
+                >
+                  <option value="all">All Career Paths</option>
+                  {careers.map((career) => (
+                    <option key={career.id} value={career.id}>
+                      {career.title}
+                    </option>
+                  ))}
+                </select>
+                <select
                   value={disabledFilter}
                   onChange={(event) => setDisabledFilter(event.target.value)}
                   className="input-field"
@@ -1252,6 +1300,7 @@ export default function AdminDashboard() {
                     <th className="text-left py-3 px-4">Contact</th>
                     <th className="text-left py-3 px-4">County</th>
                     <th className="text-left py-3 px-4">School/Organization</th>
+                    <th className="text-left py-3 px-4">Students</th>
                     <th className="text-left py-3 px-4">Status</th>
                     <th className="text-left py-3 px-4">Joined</th>
                     <th className="text-left py-3 px-4">Actions</th>
@@ -1278,6 +1327,9 @@ export default function AdminDashboard() {
                         </td>
                         <td className="py-3 px-4">{u.county || '-'}</td>
                         <td className="py-3 px-4">{u.school_name || u.organization || '-'}</td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {u.role === 'counselor' ? (u.student_count ?? 0) : '-'}
+                        </td>
                         <td className="py-3 px-4">
                           <div className="flex flex-col gap-1">
                             <span className={`px-2 py-1 rounded text-xs ${
@@ -1303,6 +1355,14 @@ export default function AdminDashboard() {
                             >
                               View/Edit
                             </button>
+                          {u.role === 'counselor' && (
+                            <button
+                              onClick={() => openUserModal(u)}
+                              className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
+                            >
+                              Students
+                            </button>
+                          )}
                             <button
                               onClick={() => handleToggleDisable(u)}
                               className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
@@ -1646,6 +1706,38 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+
+              {selectedUser.role === 'counselor' && (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">Students Being Counseled</h3>
+                    <span className="text-sm text-gray-500">
+                      {loadingCounselorStudents
+                        ? 'Loading...'
+                        : `${selectedUser.student_count ?? counselorStudents.length} students`}
+                    </span>
+                  </div>
+                  {loadingCounselorStudents ? (
+                    <div className="text-sm text-gray-500">Loading students...</div>
+                  ) : counselorStudents.length === 0 ? (
+                    <div className="text-sm text-gray-500">No students assigned yet.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {counselorStudents.map((student) => (
+                        <div key={student.id} className="border rounded-lg p-3 text-sm text-gray-600">
+                          <p className="font-medium text-gray-900">
+                            {student.first_name} {student.last_name}
+                          </p>
+                          <p>{student.school_name || 'No school listed'}</p>
+                          <p>
+                            {student.county || 'No county'} {student.grade_level ? `• Grade ${student.grade_level}` : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

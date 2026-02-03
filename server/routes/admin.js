@@ -32,7 +32,16 @@ router.get('/users', authenticate, requireRole('admin'), (req, res) => {
       users.created_at,
       users.updated_at,
       GROUP_CONCAT(counselor_career_paths.career_id) AS career_ids,
-      GROUP_CONCAT(careers.title) AS career_titles
+      GROUP_CONCAT(careers.title) AS career_titles,
+      (
+        SELECT COUNT(DISTINCT student_id) FROM (
+          SELECT student_id FROM appointments WHERE counselor_id = users.id
+          UNION
+          SELECT student_id FROM schedules WHERE counselor_id = users.id
+          UNION
+          SELECT student_id FROM live_sessions WHERE counselor_id = users.id
+        )
+      ) AS student_count
     FROM users
     LEFT JOIN counselor_career_paths 
       ON users.id = counselor_career_paths.counselor_id
@@ -325,6 +334,32 @@ router.delete('/users/:id', authenticate, requireRole('admin'), (req, res) => {
 
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   res.json({ message: 'User deleted successfully' });
+});
+
+// Get counselor's students (admin only)
+router.get('/counselors/:id/students', authenticate, requireRole('admin'), (req, res) => {
+  const counselor = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.params.id);
+  if (!counselor || counselor.role !== 'counselor') {
+    return res.status(404).json({ error: 'Counselor not found' });
+  }
+
+  const students = db.prepare(`
+    SELECT DISTINCT users.id, users.first_name, users.last_name, users.school_name,
+           users.county, users.grade_level
+    FROM users
+    WHERE users.role = 'student'
+      AND users.is_disabled = 0
+      AND users.id IN (
+        SELECT student_id FROM appointments WHERE counselor_id = ?
+        UNION
+        SELECT student_id FROM schedules WHERE counselor_id = ?
+        UNION
+        SELECT student_id FROM live_sessions WHERE counselor_id = ?
+      )
+    ORDER BY users.first_name, users.last_name
+  `).all(req.params.id, req.params.id, req.params.id);
+
+  res.json({ students });
 });
 
 // Get analytics
