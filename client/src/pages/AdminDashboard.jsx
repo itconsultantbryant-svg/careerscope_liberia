@@ -71,6 +71,7 @@ export default function AdminDashboard() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [counselorStudents, setCounselorStudents] = useState([]);
   const [loadingCounselorStudents, setLoadingCounselorStudents] = useState(false);
+  const [focusStudentsSection, setFocusStudentsSection] = useState(false);
   
   // Determine active tab from URL
   const getActiveTab = () => {
@@ -214,12 +215,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const openUserModal = (targetUser) => {
+  const openUserModal = (targetUser, options = {}) => {
+    const { focusStudents = false } = options;
     const careerIds = targetUser.career_ids
       ? targetUser.career_ids.split(',').map((id) => Number(id)).filter(Boolean)
       : [];
     setSelectedUser(targetUser);
     setCounselorStudents([]);
+    setFocusStudentsSection(Boolean(focusStudents));
     setEditUserData({
       firstName: targetUser.first_name || '',
       lastName: targetUser.last_name || '',
@@ -249,6 +252,7 @@ export default function AdminDashboard() {
     setEditUserData(null);
     setShowUserModal(false);
     setCounselorStudents([]);
+    setFocusStudentsSection(false);
   };
 
   const handleEditUserChange = (event) => {
@@ -337,6 +341,15 @@ export default function AdminDashboard() {
     } finally {
       setLoadingCounselorStudents(false);
     }
+  };
+  const handleStudentsAction = (targetUser) => {
+    openUserModal(targetUser, { focusStudents: true });
+    setTimeout(() => {
+      const section = document.getElementById('counselor-students-section');
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 200);
   };
 
   const handleExportUsers = async () => {
@@ -1357,7 +1370,7 @@ export default function AdminDashboard() {
                             </button>
                           {u.role === 'counselor' && (
                             <button
-                              onClick={() => openUserModal(u)}
+                              onClick={() => handleStudentsAction(u)}
                               className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
                             >
                               Students
@@ -1708,7 +1721,7 @@ export default function AdminDashboard() {
               </div>
 
               {selectedUser.role === 'counselor' && (
-                <div className="mb-6">
+                <div className="mb-6" id="counselor-students-section">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Students Being Counseled</h3>
                     <span className="text-sm text-gray-500">
@@ -1717,6 +1730,11 @@ export default function AdminDashboard() {
                         : `${selectedUser.student_count ?? counselorStudents.length} students`}
                     </span>
                   </div>
+                  {focusStudentsSection && (
+                    <div className="mb-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-700">
+                      Jumped to students list.
+                    </div>
+                  )}
                   {loadingCounselorStudents ? (
                     <div className="text-sm text-gray-500">Loading students...</div>
                   ) : counselorStudents.length === 0 ? (
