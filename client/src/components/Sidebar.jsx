@@ -14,12 +14,19 @@ import {
   ClipboardList,
   Bell,
   LogOut,
+  X,
 } from 'lucide-react';
 
-export default function Sidebar({ role }) {
+export default function Sidebar({ role, isOpen = false, onClose }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -82,7 +89,31 @@ export default function Sidebar({ role }) {
   const menu = role === 'student' ? studentMenu : role === 'counselor' ? counselorMenu : adminMenu;
 
   return (
-    <div className="w-64 bg-white shadow-lg min-h-screen fixed left-0 top-0 pt-16 flex flex-col">
+    <>
+      {isOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={handleClose}
+          aria-label="Close sidebar"
+        />
+      )}
+      <div
+        className={`w-64 bg-white shadow-lg min-h-screen fixed left-0 top-0 pt-4 md:pt-16 flex flex-col z-50 transform transition-transform duration-200 ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } md:translate-x-0`}
+      >
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b">
+        <span className="font-semibold text-gray-900">Menu</span>
+        <button
+          type="button"
+          className="text-gray-600"
+          onClick={handleClose}
+          aria-label="Close sidebar"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
         {menu.map((item) => {
           const Icon = item.icon;
@@ -95,6 +126,7 @@ export default function Sidebar({ role }) {
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-700 hover:bg-gray-100'
               }`}
+              onClick={handleClose}
             >
               <Icon className="w-5 h-5" />
               <span className="font-medium">{item.label}</span>
@@ -113,6 +145,7 @@ export default function Sidebar({ role }) {
         </button>
       </div>
     </div>
+    </>
   );
 }
 

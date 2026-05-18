@@ -122,7 +122,7 @@ export default function Careers() {
           </div>
 
           {/* Filter and Sort Controls */}
-          <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}

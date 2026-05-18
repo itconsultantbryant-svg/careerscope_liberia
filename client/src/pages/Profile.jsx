@@ -27,6 +27,7 @@ export default function Profile() {
   });
   const [profileImage, setProfileImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const counties = [
     'Montserrado', 'Grand Bassa', 'Lofa', 'Nimba', 'Bong', 'Grand Cape Mount',
@@ -131,10 +132,14 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <Sidebar role={user.role} />
+      <Navbar
+        showSidebarToggle
+        sidebarOpen={sidebarOpen}
+        onSidebarToggle={() => setSidebarOpen((prev) => !prev)}
+      />
+      <Sidebar role={user.role} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="ml-64 p-8">
+      <div className="ml-0 md:ml-64 p-4 sm:p-6 md:p-8">
         <div className="max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -148,7 +153,7 @@ export default function Profile() {
               <label className="block text-sm font-medium text-gray-700 mb-4">
                 Profile Picture
               </label>
-              <div className="flex items-center space-x-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-6 space-y-4 sm:space-y-0">
                 <div className="relative">
                   {previewImage ? (
                     <img

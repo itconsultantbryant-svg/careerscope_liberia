@@ -26,6 +26,7 @@ export default function CounselorDashboard() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [newMaterial, setNewMaterial] = useState({
     studentId: '',
     materialType: 'note',
@@ -51,6 +52,10 @@ export default function CounselorDashboard() {
   };
 
   const activeSection = getActiveSection();
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     fetchData();
@@ -212,10 +217,14 @@ export default function CounselorDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <Sidebar role="counselor" />
+      <Navbar
+        showSidebarToggle
+        sidebarOpen={sidebarOpen}
+        onSidebarToggle={() => setSidebarOpen((prev) => !prev)}
+      />
+      <Sidebar role="counselor" isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="ml-64 p-8">
+      <div className="ml-0 md:ml-64 p-4 sm:p-6 md:p-8">
         {/* Welcome Section - Only on dashboard */}
         {activeSection === 'dashboard' && (
           <motion.div
@@ -223,7 +232,7 @@ export default function CounselorDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-gradient-to-r from-blue-600 to-primary-600 text-white rounded-xl p-6 mb-8"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-3xl font-bold mb-2">Welcome, {user?.first_name}!</h1>
                 <p className="text-white/90">

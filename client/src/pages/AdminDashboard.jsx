@@ -47,6 +47,7 @@ export default function AdminDashboard() {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [createCounselorData, setCreateCounselorData] = useState({
     firstName: '',
     lastName: '',
@@ -93,6 +94,7 @@ export default function AdminDashboard() {
   
   useEffect(() => {
     setActiveTab(getActiveTab());
+    setSidebarOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -504,10 +506,14 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <Sidebar role="admin" />
+      <Navbar
+        showSidebarToggle
+        sidebarOpen={sidebarOpen}
+        onSidebarToggle={() => setSidebarOpen((prev) => !prev)}
+      />
+      <Sidebar role="admin" isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="ml-64 p-8">
+      <div className="ml-0 md:ml-64 p-4 sm:p-6 md:p-8">
         {/* Real-time Indicator */}
         <div className="mb-4 flex items-center space-x-2 text-sm text-gray-600">
           <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -520,7 +526,7 @@ export default function AdminDashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-r from-gold-600 to-primary-600 text-white rounded-xl p-6 mb-8"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
               <p className="text-white/90">Comprehensive system overview and management</p>

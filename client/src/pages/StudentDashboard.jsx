@@ -37,6 +37,7 @@ export default function StudentDashboard() {
   const [resetting, setResetting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Determine active section from URL
   const getActiveSection = () => {
@@ -63,6 +64,7 @@ export default function StudentDashboard() {
       }, 10000);
       return () => clearInterval(interval);
     }
+    setSidebarOpen(false);
   }, [activeSection]);
 
   // Handle URL query parameters for booking
@@ -234,8 +236,12 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <Sidebar role="student" />
+      <Navbar
+        showSidebarToggle
+        sidebarOpen={sidebarOpen}
+        onSidebarToggle={() => setSidebarOpen((prev) => !prev)}
+      />
+      <Sidebar role="student" isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
       {/* Quiz Modal - Keep open to show results after completion */}
       <CareerQuizModal
@@ -254,7 +260,7 @@ export default function StudentDashboard() {
             animate={{ scale: 1, opacity: 1 }}
             className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h3 className="text-2xl font-bold text-red-600">⚠️ Warning: Reset Progress</h3>
               <button
                 onClick={() => setShowResetWarning(false)}
@@ -303,7 +309,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      <div className="ml-64 p-8">
+      <div className="ml-0 md:ml-64 p-4 sm:p-6 md:p-8">
         {/* Welcome Section with Progress - Only on dashboard */}
         {activeSection === 'dashboard' && (
           <motion.div

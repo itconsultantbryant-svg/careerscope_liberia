@@ -1,11 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, User, LogOut } from 'lucide-react';
+import { Menu, X, User, LogOut, PanelLeft } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationBell from './NotificationBell';
 
-export default function Navbar() {
+export default function Navbar({ showSidebarToggle = false, sidebarOpen = false, onSidebarToggle }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -20,19 +20,31 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3">
-            <img 
-              src="/assets/careerscope_logo.jpeg" 
-              alt="CareerScope Logo" 
-              className="h-10 w-auto object-contain"
-              style={{ display: 'block', maxHeight: '40px' }}
-              onError={(e) => {
-                console.error('Failed to load logo image');
-                e.target.style.display = 'none';
-              }}
-            />
-            <span className="text-xl font-bold text-gray-900">CareerScope</span>
-          </Link>
+          <div className="flex items-center space-x-3">
+            {showSidebarToggle && (
+              <button
+                type="button"
+                className="md:hidden text-gray-700"
+                onClick={onSidebarToggle}
+                aria-label="Toggle sidebar"
+              >
+                {sidebarOpen ? <X className="w-6 h-6" /> : <PanelLeft className="w-6 h-6" />}
+              </button>
+            )}
+            <Link to="/" className="flex items-center space-x-3">
+              <img 
+                src="/assets/careerscope_logo.jpeg" 
+                alt="CareerScope Logo" 
+                className="h-10 w-auto object-contain"
+                style={{ display: 'block', maxHeight: '40px' }}
+                onError={(e) => {
+                  console.error('Failed to load logo image');
+                  e.target.style.display = 'none';
+                }}
+              />
+              <span className="text-xl font-bold text-gray-900">CareerScope</span>
+            </Link>
+          </div>
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center space-x-6">
