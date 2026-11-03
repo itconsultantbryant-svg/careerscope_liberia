@@ -32,10 +32,13 @@ export const isOnline = () => navigator.onLine;
 
 // Intercept axios requests to use cache when offline
 export const setupOfflineSupport = (axiosInstance) => {
+  // Only cache public career catalog data. Never persist private profiles,
+  // financial records or admin responses in a shared browser cache.
+  const cacheable = (config) => config.method === 'get' && /^\/careers(?:\/\d+)?$/.test(config.url || '');
   // Request interceptor - use cache if offline
   axiosInstance.interceptors.request.use(
     (config) => {
-      if (!isOnline()) {
+      if (!isOnline() && cacheable(config)) {
         const cached = getCachedData(config.url);
         if (cached) {
           // Return cached response
@@ -54,7 +57,7 @@ export const setupOfflineSupport = (axiosInstance) => {
   // Response interceptor - cache successful responses
   axiosInstance.interceptors.response.use(
     (response) => {
-      if (isOnline() && response.config.method === 'get') {
+      if (isOnline() && cacheable(response.config)) {
         setCachedData(response.config.url, response.data);
       }
       return response;
@@ -74,4 +77,3 @@ export const setupOfflineSupport = (axiosInstance) => {
     }
   );
 };
-

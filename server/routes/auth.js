@@ -4,8 +4,24 @@ import jwt from 'jsonwebtoken';
 import { db } from '../db/init.js';
 import { authenticate, optionalAuth } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 
 const router = express.Router();
+
+const studentRegistration = z.object({
+  firstName: z.string().trim().min(2).max(100),
+  lastName: z.string().trim().min(2).max(100),
+  phone: z.string().trim().regex(/^(?:(?:077|088)\d{7}|\+[1-9]\d{7,14})$/),
+  email: z.string().trim().toLowerCase().email().or(z.literal('')).optional(),
+  country: z.string().trim().min(1).max(100).default('Liberia'),
+  county: z.string().trim().min(1).max(100),
+  schoolName: z.string().trim().min(1).max(200),
+  gradeLevel: z.coerce.number().int().min(7).max(12),
+  password: z.string().min(8).max(72),
+  gender: z.string().max(50).optional(),
+  dateOfBirth: z.string().max(10).optional(),
+  dreamCareers: z.array(z.number().int().positive()).max(50).optional(),
+});
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -23,6 +39,8 @@ const loginLimiter = rateLimit({
 // Register Student
 router.post('/register/student', async (req, res) => {
   try {
+    const parsed = studentRegistration.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Please check the registration fields', fields: parsed.error.flatten().fieldErrors });
     const {
       firstName,
       lastName,
@@ -31,11 +49,12 @@ router.post('/register/student', async (req, res) => {
       phone,
       email,
       county,
+      country,
       schoolName,
       gradeLevel,
       dreamCareers,
       password,
-    } = req.body;
+    } = parsed.data;
 
     // Validation
     if (!firstName || !lastName || !phone || !password || !county || !schoolName || !gradeLevel) {
@@ -47,14 +66,17 @@ router.post('/register/student', async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ error: 'Phone number already registered' });
     }
+    if (email && db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
+      return res.status(400).json({ error: 'Email address already registered' });
+    }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
     const result = db.prepare(`
-      INSERT INTO users (first_name, last_name, gender, date_of_birth, phone, email, county, school_name, grade_level, password, role, is_approved)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'student', 1)
+      INSERT INTO users (first_name, last_name, gender, date_of_birth, phone, email, county, country, school_name, grade_level, password, role, is_approved)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'student', 1)
     `).run(
       firstName,
       lastName,
@@ -63,6 +85,7 @@ router.post('/register/student', async (req, res) => {
       phone,
       email || null,
       county,
+      country || 'Liberia',
       schoolName,
       gradeLevel,
       hashedPassword
@@ -137,6 +160,10 @@ router.post('/login', loginLimiter, async (req, res) => {
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    if (process.env.NODE_ENV === 'production' && ['Liberia2025!', 'student123', 'counselor123'].includes(password)) {
+      return res.status(403).json({ error: 'This demo password cannot be used in production. Contact the administrator for new credentials.' });
+    }
+    if (user.subscription_expires_at && new Date(user.subscription_expires_at) <= new Date()) user.is_premium = 0;
 
     // Generate JWT
     const token = jwt.sign(
@@ -159,7 +186,6 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.json({
       message: 'Login successful',
       user: userWithoutPassword,
-      token,
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -179,14 +205,14 @@ router.get('/me', optionalAuth, (req, res) => {
     return res.json({ user: null });
   }
 
-  const user = db.prepare('SELECT id, email, phone, first_name, last_name, gender, date_of_birth, county, school_name, grade_level, role, qualification, years_of_experience, industry_specialty, organization, bio, profile_image, is_approved, is_premium, created_at FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, email, phone, first_name, last_name, gender, date_of_birth, county, country, city, address, guardian_name, guardian_phone, student_number, learning_goals, school_name, grade_level, role, qualification, years_of_experience, industry_specialty, organization, bio, profile_image, is_approved, is_premium, subscription_expires_at, created_at FROM users WHERE id = ?').get(req.user.id);
   
   if (!user) {
     return res.json({ user: null });
   }
 
+  if (user.subscription_expires_at && new Date(user.subscription_expires_at) <= new Date()) user.is_premium = 0;
   res.json({ user });
 });
 
 export default router;
-

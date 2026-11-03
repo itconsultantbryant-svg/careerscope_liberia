@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import api from '../utils/api';
+import api, { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import EmojiPicker from 'emoji-picker-react';
 import {
@@ -52,7 +52,10 @@ export default function Chat({ selectedUser, onClose }) {
   const [callStartTime, setCallStartTime] = useState(null);
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCallData, setIncomingCallData] = useState(null);
-  
+  const [activeCallId, setActiveCallId] = useState(null);
+  const activeCallIdRef = useRef(null);
+  const callHandlersRef = useRef({});
+
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const documentInputRef = useRef(null);
@@ -68,12 +71,12 @@ export default function Chat({ selectedUser, onClose }) {
       fetchCallHistory();
       const convId = [user.id, selectedUser.id].sort().join('_');
       setConversationId(convId);
-      
+
       if (socket) {
         socket.emit('join_conversation', convId);
-        
+
         socket.on('new_message', (message) => {
-          if (message.senderId === selectedUser.id || message.receiverId === selectedUser.id || 
+          if (message.senderId === selectedUser.id || message.receiverId === selectedUser.id ||
               message.sender_id === selectedUser.id || message.receiver_id === selectedUser.id) {
             setMessages(prev => {
               const exists = prev.some(m => m.id === message.id || m.id === message.messageId);
@@ -93,24 +96,24 @@ export default function Chat({ selectedUser, onClose }) {
 
         socket.on('incoming_call', (data) => {
           if (data.from === selectedUser.id) {
-            handleIncomingCall(data);
+            callHandlersRef.current.handleIncomingCall?.(data);
           }
         });
 
         socket.on('call_answered', (data) => {
           if (data.from === selectedUser.id) {
-            handleCallAnswer(data);
+            callHandlersRef.current.handleCallAnswer?.(data);
           }
         });
 
         socket.on('call_ended', (data) => {
           if (data.from === selectedUser.id) {
-            handleCallEnd();
+            callHandlersRef.current.handleCallEnd?.();
           }
         });
 
         socket.on('ice_candidate', (data) => {
-          handleIceCandidate(data);
+          callHandlersRef.current.handleIceCandidate?.(data);
         });
 
         socket.on('group_call_invite', (data) => {
@@ -120,8 +123,8 @@ export default function Chat({ selectedUser, onClose }) {
     }
 
     return () => {
-      if (socket && conversationId) {
-        socket.emit('leave_conversation', conversationId);
+      if (socket && selectedUser) {
+        socket.emit('leave_conversation', [user.id, selectedUser.id].sort().join('_'));
         socket.off('new_message');
         socket.off('user_typing');
         socket.off('incoming_call');
@@ -162,6 +165,10 @@ export default function Chat({ selectedUser, onClose }) {
 
   const sendMessage = async (content = null, messageType = 'text', attachment = null) => {
     if (!content && !attachment) return;
+    if (attachment?.size > 3 * 1024 * 1024) {
+      toast.error('Attachments must be under 3MB. Compress the file or send a link.');
+      return;
+    }
 
     try {
       const formData = new FormData();
@@ -225,7 +232,7 @@ export default function Chat({ selectedUser, onClose }) {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -242,7 +249,7 @@ export default function Chat({ selectedUser, onClose }) {
           chunks.push(e.data);
         }
       };
-      
+
       recorder.onstop = () => {
         if (chunks.length > 0) {
           const blob = new Blob(chunks, { type: recorder.mimeType });
@@ -281,7 +288,7 @@ export default function Chat({ selectedUser, onClose }) {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          
+
           const maxWidth = 1920;
           const maxHeight = 1080;
           if (width > maxWidth || height > maxHeight) {
@@ -293,12 +300,12 @@ export default function Chat({ selectedUser, onClose }) {
               height = maxHeight;
             }
           }
-          
+
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          
+
           canvas.toBlob(
             (blob) => {
               if (blob) {
@@ -402,6 +409,7 @@ export default function Chat({ selectedUser, onClose }) {
         socket.emit('ice_candidate', {
           to: userId,
           candidate: event.candidate,
+          callId: activeCallIdRef.current,
         });
       }
     };
@@ -452,6 +460,15 @@ export default function Chat({ selectedUser, onClose }) {
         // Group call logic
         toast.info('Group call feature - add participants');
       } else {
+        const history = await api.post('/calls/history', {
+          receiverId: selectedUser.id,
+          callType: type,
+        });
+        setActiveCallId(history.data.callId);
+        activeCallIdRef.current = history.data.callId;
+        setIsCaller(true);
+        setCallStatus('calling');
+
         // One-on-one call
         const pc = createPeerConnection(selectedUser.id, true);
         setPeerConnection(pc);
@@ -464,6 +481,7 @@ export default function Chat({ selectedUser, onClose }) {
             to: selectedUser.id,
             signal: offer,
             type,
+            callId: history.data.callId,
           });
         }
       }
@@ -479,18 +497,10 @@ export default function Chat({ selectedUser, onClose }) {
     setIsCaller(false);
     setCallStatus('ringing');
     setIncomingCallData(data); // Store call data for accept button
-    
-    // Create call history entry for incoming call
-    try {
-      await api.post('/calls/history', {
-        callerId: selectedUser.id,
-        callType: data.type,
-        status: 'ongoing'
-      });
-    } catch (err) {
-      console.error('Failed to create call history:', err);
-    }
-    
+
+    setActiveCallId(data.callId || null);
+    activeCallIdRef.current = data.callId || null;
+
     // The UI will show accept/reject buttons - no need for confirm dialog
   };
 
@@ -499,7 +509,7 @@ export default function Chat({ selectedUser, onClose }) {
       setCallStatus('connecting');
       setCallStartTime(Date.now());
       setCallDuration(0);
-      
+
       const constraints = {
         video: data.type === 'video' ? {
           width: { ideal: 1920, min: 1280 },
@@ -539,14 +549,15 @@ export default function Chat({ selectedUser, onClose }) {
         socket.emit('call_answer', {
           to: selectedUser.id,
           signal: answer,
+          callId: data.callId,
         });
       }
-      
+
       setCallStatus('ongoing');
-      
+
       // Update call history to answered
       try {
-        await api.patch('/calls/history/latest', {
+        if (data.callId) await api.patch(`/calls/history/${data.callId}`, {
           status: 'answered'
         });
       } catch (err) {
@@ -566,10 +577,10 @@ export default function Chat({ selectedUser, onClose }) {
         setCallStatus('ongoing');
         setCallStartTime(Date.now());
         setCallDuration(0);
-        
+
         // Update call history to answered
         try {
-          await api.patch('/calls/history/latest', {
+          if (data.callId) await api.patch(`/calls/history/${data.callId}`, {
             status: 'answered'
           });
         } catch (err) {
@@ -597,23 +608,23 @@ export default function Chat({ selectedUser, onClose }) {
   };
 
   const handleCallEnd = () => {
-    endCall();
+    endCall(undefined, false);
   };
 
-  const endCall = async () => {
+  const endCall = async (finalStatus, notify = true) => {
     const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
-    
+
     // Update call history
     try {
-      await api.patch('/calls/history/latest', {
-        status: callStatus === 'ongoing' ? 'answered' : 'cancelled',
+      if (activeCallIdRef.current && notify) await api.patch(`/calls/history/${activeCallIdRef.current}`, {
+        status: typeof finalStatus === 'string' ? finalStatus : (callStatus === 'ongoing' ? 'answered' : 'cancelled'),
         duration: duration,
         endedAt: new Date().toISOString()
       });
     } catch (err) {
       console.error('Failed to update call history:', err);
     }
-    
+
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
       setLocalStream(null);
@@ -632,8 +643,8 @@ export default function Chat({ selectedUser, onClose }) {
     }
     peerConnections.forEach(pc => pc.close());
     setPeerConnections(new Map());
-    if (socket) {
-      socket.emit('call_end', { to: selectedUser.id });
+    if (socket && notify) {
+      socket.emit('call_end', { to: selectedUser.id, callId: activeCallIdRef.current });
     }
     setInCall(false);
     setCallType(null);
@@ -643,22 +654,21 @@ export default function Chat({ selectedUser, onClose }) {
     setIsCaller(false);
     setCallStartTime(null);
     setCallDuration(0);
-    
+    setActiveCallId(null);
+    activeCallIdRef.current = null;
+
     // Refresh call history
     fetchCallHistory();
   };
-  
+
   const rejectCall = async () => {
-    try {
-      await api.patch('/calls/history/latest', {
-        status: 'rejected'
-      });
-    } catch (err) {
-      console.error('Failed to update call history:', err);
-    }
-    endCall();
+    endCall('rejected');
   };
-  
+
+  useEffect(() => {
+    callHandlersRef.current = { handleIncomingCall, handleCallAnswer, handleCallEnd, handleIceCandidate };
+  });
+
   const fetchCallHistory = async () => {
     try {
       const res = await api.get(`/calls/history/${selectedUser.id}`);
@@ -667,14 +677,14 @@ export default function Chat({ selectedUser, onClose }) {
       console.error('Failed to fetch call history:', error);
     }
   };
-  
+
   const switchCamera = async () => {
     if (!localStream || callType !== 'video') return;
-    
+
     try {
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
       setFacingMode(newFacingMode);
-      
+
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         const constraints = {
@@ -684,7 +694,7 @@ export default function Chat({ selectedUser, onClose }) {
           facingMode: newFacingMode,
           aspectRatio: 16/9
         };
-        
+
         const newStream = await navigator.mediaDevices.getUserMedia({
           video: constraints,
           audio: {
@@ -695,26 +705,26 @@ export default function Chat({ selectedUser, onClose }) {
             channelCount: 2
           }
         });
-        
+
         // Replace video track
         const newVideoTrack = newStream.getVideoTracks()[0];
-        const sender = peerConnection?.getSenders().find(s => 
+        const sender = peerConnection?.getSenders().find(s =>
           s.track && s.track.kind === 'video'
         );
-        
+
         if (sender && newVideoTrack) {
           await sender.replaceTrack(newVideoTrack);
           videoTrack.stop();
-          
+
           // Update local stream
           localStream.removeTrack(videoTrack);
           localStream.addTrack(newVideoTrack);
-          
+
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = localStream;
           }
         }
-        
+
         // Stop audio tracks from new stream (we only need video)
         newStream.getAudioTracks().forEach(track => track.stop());
       }
@@ -751,15 +761,15 @@ export default function Chat({ selectedUser, onClose }) {
     } else {
       if (audioRef.current) {
         // Ensure URL is absolute
-        const fullUrl = audioUrl.startsWith('http') 
-          ? audioUrl 
-          : `http://localhost:5000${audioUrl}`;
-        
+        const fullUrl = audioUrl.startsWith('http')
+          ? audioUrl
+          : assetUrl(audioUrl);
+
         audioRef.current.src = fullUrl;
         audioRef.current.load(); // Reload the audio element
-        
+
         const playPromise = audioRef.current.play();
-        
+
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
@@ -771,7 +781,7 @@ export default function Chat({ selectedUser, onClose }) {
               setPlayingAudio(null);
             });
         }
-        
+
         audioRef.current.onended = () => setPlayingAudio(null);
         audioRef.current.onerror = (error) => {
           console.error('Audio playback error:', error);
@@ -801,9 +811,9 @@ export default function Chat({ selectedUser, onClose }) {
           </button>
           <div className="w-10 h-10 bg-primary-200 rounded-full flex items-center justify-center">
             {selectedUser.profile_image ? (
-              <img 
-                src={selectedUser.profile_image.startsWith('http') ? selectedUser.profile_image : `http://localhost:5000${selectedUser.profile_image}`} 
-                alt={selectedUser.first_name} 
+              <img
+                src={assetUrl(selectedUser.profile_image)}
+                alt={selectedUser.first_name}
                 className="w-10 h-10 rounded-full object-cover"
                 onError={(e) => {
                   e.target.style.display = 'none';
@@ -925,9 +935,9 @@ export default function Chat({ selectedUser, onClose }) {
                           <div className="text-center text-white">
                             <div className="w-40 h-40 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4">
                               {selectedUser.profile_image ? (
-                                <img 
-                                  src={selectedUser.profile_image.startsWith('http') ? selectedUser.profile_image : `http://localhost:5000${selectedUser.profile_image}`} 
-                                  alt={selectedUser.first_name} 
+                                <img
+                                  src={assetUrl(selectedUser.profile_image)}
+                                  alt={selectedUser.first_name}
                                   className="w-40 h-40 rounded-full object-cover"
                                   onError={(e) => {
                                     e.target.style.display = 'none';
@@ -952,7 +962,7 @@ export default function Chat({ selectedUser, onClose }) {
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Local video (picture-in-picture) */}
                       {localStream && (
                         <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden border-2 border-white shadow-lg">
@@ -967,9 +977,9 @@ export default function Chat({ selectedUser, onClose }) {
                           ) : (
                             <div className="w-full h-full bg-primary-600 flex items-center justify-center">
                               {user?.profile_image ? (
-                                <img 
-                                  src={user.profile_image.startsWith('http') ? user.profile_image : `http://localhost:5000${user.profile_image}`} 
-                                  alt={user.first_name} 
+                                <img
+                                  src={assetUrl(user.profile_image)}
+                                  alt={user.first_name}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
                                     e.target.style.display = 'none';
@@ -1002,9 +1012,9 @@ export default function Chat({ selectedUser, onClose }) {
                     <div className="text-center text-white">
                       <div className="w-32 h-32 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4 overflow-hidden">
                         {user?.profile_image ? (
-                          <img 
-                            src={user.profile_image.startsWith('http') ? user.profile_image : `http://localhost:5000${user.profile_image}`} 
-                            alt={user.first_name} 
+                          <img
+                            src={assetUrl(user.profile_image)}
+                            alt={user.first_name}
                             className="w-32 h-32 rounded-full object-cover"
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -1022,21 +1032,21 @@ export default function Chat({ selectedUser, onClose }) {
                       </div>
                       <p className="text-xl font-semibold">You</p>
                       <p className="text-sm text-gray-400 mt-1">
-                        {callStatus === 'calling' ? 'Calling...' : 
-                         callStatus === 'ringing' ? 'Ringing...' : 
-                         callStatus === 'connecting' ? 'Connecting...' : 
-                         callStatus === 'ongoing' ? `Ongoing - ${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')}` : 
+                        {callStatus === 'calling' ? 'Calling...' :
+                         callStatus === 'ringing' ? 'Ringing...' :
+                         callStatus === 'connecting' ? 'Connecting...' :
+                         callStatus === 'ongoing' ? `Ongoing - ${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')}` :
                          'Connected'}
                       </p>
                     </div>
-                    
+
                     {/* Receiver profile */}
                     <div className="text-center text-white">
                       <div className="w-32 h-32 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4 overflow-hidden">
                         {selectedUser.profile_image ? (
-                          <img 
-                            src={selectedUser.profile_image.startsWith('http') ? selectedUser.profile_image : `http://localhost:5000${selectedUser.profile_image}`} 
-                            alt={selectedUser.first_name} 
+                          <img
+                            src={assetUrl(selectedUser.profile_image)}
+                            alt={selectedUser.first_name}
                             className="w-32 h-32 rounded-full object-cover"
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -1056,10 +1066,10 @@ export default function Chat({ selectedUser, onClose }) {
                         {selectedUser.first_name} {selectedUser.last_name}
                       </p>
                       <p className="text-sm text-gray-400 mt-1">
-                        {callStatus === 'calling' ? 'Calling...' : 
-                         callStatus === 'ringing' ? (isCaller ? 'Ringing...' : 'Incoming call') : 
-                         callStatus === 'connecting' ? 'Connecting...' : 
-                         callStatus === 'ongoing' ? `Ongoing - ${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')}` : 
+                        {callStatus === 'calling' ? 'Calling...' :
+                         callStatus === 'ringing' ? (isCaller ? 'Ringing...' : 'Incoming call') :
+                         callStatus === 'connecting' ? 'Connecting...' :
+                         callStatus === 'ongoing' ? `Ongoing - ${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')}` :
                          'Connected'}
                       </p>
                     </div>
@@ -1120,7 +1130,7 @@ export default function Chat({ selectedUser, onClose }) {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages
-          .filter((message, index, self) => 
+          .filter((message, index, self) =>
             index === self.findIndex(m => m.id === message.id)
           )
           .map((message, index) => (
@@ -1163,27 +1173,27 @@ export default function Chat({ selectedUser, onClose }) {
 
                 {message.message_type === 'image' && message.attachment_url ? (
                   <div className="relative group">
-                    <img 
-                      src={message.attachment_url.startsWith('http') ? message.attachment_url : `http://localhost:5000${message.attachment_url}`} 
-                      alt="Shared image" 
+                    <img
+                      src={assetUrl(message.attachment_url)}
+                      alt="Shared image"
                       className="max-w-xs rounded-lg mb-1 cursor-pointer"
                       onError={(e) => {
                         console.error('Image load error:', message.attachment_url);
                         e.target.style.display = 'none';
                       }}
                       onClick={() => {
-                        const url = message.attachment_url.startsWith('http') 
-                          ? message.attachment_url 
-                          : `http://localhost:5000${message.attachment_url}`;
+                        const url = message.attachment_url.startsWith('http')
+                          ? message.attachment_url
+                          : assetUrl(message.attachment_url);
                         window.open(url, '_blank');
                       }}
                     />
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        const url = message.attachment_url.startsWith('http') 
-                          ? message.attachment_url 
-                          : `http://localhost:5000${message.attachment_url}`;
+                        const url = message.attachment_url.startsWith('http')
+                          ? message.attachment_url
+                          : assetUrl(message.attachment_url);
                         const link = document.createElement('a');
                         link.href = url;
                         link.download = message.attachment_name || `image_${message.id}.jpg`;
@@ -1202,14 +1212,14 @@ export default function Chat({ selectedUser, onClose }) {
                   <div className="flex items-center space-x-2">
                     <Paperclip className="w-4 h-4" />
                     <a
-                      href={message.attachment_url.startsWith('http') ? message.attachment_url : `http://localhost:5000${message.attachment_url}`}
+                      href={assetUrl(message.attachment_url)}
                       download={message.attachment_name}
                       className="underline hover:opacity-80"
                       onClick={(e) => {
                         e.preventDefault();
-                        const url = message.attachment_url.startsWith('http') 
-                          ? message.attachment_url 
-                          : `http://localhost:5000${message.attachment_url}`;
+                        const url = message.attachment_url.startsWith('http')
+                          ? message.attachment_url
+                          : assetUrl(message.attachment_url);
                         const link = document.createElement('a');
                         link.href = url;
                         link.download = message.attachment_name || `document_${message.id}`;
@@ -1450,4 +1460,3 @@ export default function Chat({ selectedUser, onClose }) {
     </div>
   );
 }
-

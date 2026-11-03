@@ -12,6 +12,13 @@ router.post('/materials', authenticate, requireRole('counselor'), (req, res) => 
     if (!materialType || !title) {
       return res.status(400).json({ error: 'Material type and title required' });
     }
+    if (!['note', 'assignment', 'quiz'].includes(materialType)) {
+      return res.status(400).json({ error: 'Invalid material type' });
+    }
+    if (studentId) {
+      const student = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND is_disabled = 0").get(studentId);
+      if (!student) return res.status(404).json({ error: 'Student not found' });
+    }
 
     const result = db.prepare(`
       INSERT INTO learning_materials 
@@ -58,7 +65,7 @@ router.post('/materials', authenticate, requireRole('counselor'), (req, res) => 
         VALUES (?, ?, ?, ?, ?)
       `).run(
         studentId,
-        materialType,
+        materialType === 'note' ? 'assignment' : materialType,
         `New ${materialType} from your counselor`,
         `You have a new ${materialType}: ${title}`,
         materialId
@@ -73,7 +80,7 @@ router.post('/materials', authenticate, requireRole('counselor'), (req, res) => 
 });
 
 // Get materials for student
-router.get('/materials/student', authenticate, (req, res) => {
+router.get('/materials/student', authenticate, requireRole('student'), (req, res) => {
   const materials = db.prepare(`
     SELECT lm.*, 
            u.first_name || ' ' || u.last_name as counselor_name,
@@ -89,7 +96,7 @@ router.get('/materials/student', authenticate, (req, res) => {
   const materialsWithQuestions = materials.map(material => {
     if (material.material_type === 'quiz') {
       const questions = db.prepare(`
-        SELECT * FROM material_quiz_questions 
+        SELECT id, material_id, question, question_type, options, points, order_index FROM material_quiz_questions
         WHERE material_id = ? 
         ORDER BY order_index
       `).all(material.id);
@@ -116,7 +123,7 @@ router.get('/materials/counselor', authenticate, requireRole('counselor'), (req,
 });
 
 // Submit assignment/quiz
-router.post('/submit', authenticate, (req, res) => {
+router.post('/submit', authenticate, requireRole('student'), (req, res) => {
   try {
     const { materialId, submissionContent, answers } = req.body;
 
@@ -127,6 +134,9 @@ router.post('/submit', authenticate, (req, res) => {
     const material = db.prepare('SELECT * FROM learning_materials WHERE id = ?').get(materialId);
     if (!material) {
       return res.status(404).json({ error: 'Material not found' });
+    }
+    if (material.student_id !== null && material.student_id !== req.user.id) {
+      return res.status(403).json({ error: 'You do not have access to this material' });
     }
 
     const submission = db.prepare(`
@@ -145,7 +155,7 @@ router.post('/submit', authenticate, (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `).run(
       material.counselor_id,
-      material.material_type,
+      material.material_type === 'note' ? 'assignment' : material.material_type,
       'New submission received',
       `Student submitted ${material.material_type}: ${material.title}`,
       submission.lastInsertRowid
@@ -160,6 +170,9 @@ router.post('/submit', authenticate, (req, res) => {
 
 // Get submissions for counselor
 router.get('/submissions/:materialId', authenticate, requireRole('counselor'), (req, res) => {
+  const material = db.prepare('SELECT counselor_id FROM learning_materials WHERE id = ?').get(req.params.materialId);
+  if (!material) return res.status(404).json({ error: 'Material not found' });
+  if (material.counselor_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
   const submissions = db.prepare(`
     SELECT s.*,
            u.first_name || ' ' || u.last_name as student_name,
@@ -192,7 +205,12 @@ router.post('/grade', authenticate, requireRole('counselor'), (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const percentage = (score / (maxScore || material.points || 100)) * 100;
+    const numericScore = Number(score);
+    const numericMaximum = Number(maxScore || material.points || 100);
+    if (!Number.isFinite(numericScore) || !Number.isFinite(numericMaximum) || numericScore < 0 || numericMaximum <= 0 || numericScore > numericMaximum) {
+      return res.status(400).json({ error: 'Score must be between zero and the maximum score' });
+    }
+    const percentage = (numericScore / numericMaximum) * 100;
 
     // Create grade
     const grade = db.prepare(`
@@ -233,7 +251,7 @@ router.post('/grade', authenticate, requireRole('counselor'), (req, res) => {
 });
 
 // Get student grades
-router.get('/grades/student', authenticate, (req, res) => {
+router.get('/grades/student', authenticate, requireRole('student'), (req, res) => {
   const grades = db.prepare(`
     SELECT g.*,
            lm.title as material_title,
@@ -250,4 +268,3 @@ router.get('/grades/student', authenticate, (req, res) => {
 });
 
 export default router;
-

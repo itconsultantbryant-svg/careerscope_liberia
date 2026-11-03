@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import { createRealtimeClient } from '../utils/realtime';
 import { useAuth } from './AuthContext';
-import Cookies from 'js-cookie';
 
 const SocketContext = createContext();
 
@@ -12,11 +11,10 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     if (user) {
-      const token = Cookies.get('token');
-      const newSocket = io('http://localhost:5000', {
-        auth: { token },
-        transports: ['websocket', 'polling'],
-      });
+      // Derive the Socket.IO origin from the API setting so this also works in
+      // production. The auth cookie is HTTP-only, therefore it must be sent by
+      // the browser rather than read from JavaScript.
+      const newSocket = createRealtimeClient();
 
       newSocket.on('connect', () => {
         console.log('Socket connected');
@@ -32,9 +30,14 @@ export function SocketProvider({ children }) {
 
       return () => {
         newSocket.close();
+        setSocket(null);
+        setIsConnected(false);
       };
+    } else {
+      setSocket(null);
+      setIsConnected(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>
@@ -50,4 +53,3 @@ export const useSocket = () => {
   }
   return context;
 };
-

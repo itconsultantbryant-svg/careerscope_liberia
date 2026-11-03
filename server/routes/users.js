@@ -21,7 +21,17 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      req.invalidFileType = true;
+      return cb(null, false);
+    }
+    cb(null, true);
+  },
+});
 
 // Get user profile
 router.get('/:id', authenticate, (req, res) => {
@@ -42,10 +52,43 @@ router.get('/:id', authenticate, (req, res) => {
 // Update profile
 router.put('/profile', authenticate, upload.single('profileImage'), (req, res) => {
   try {
-    const { firstName, lastName, bio, county, schoolName, gradeLevel, qualification, yearsOfExperience, industrySpecialty, organization } = req.body;
+    if (req.invalidFileType) return res.status(400).json({ error: 'Profile image must be an image file' });
+    const { firstName, lastName, email, phone, bio, county, schoolName, gradeLevel, qualification, yearsOfExperience, industrySpecialty, organization } = req.body;
     
     const updates = [];
     const values = [];
+    const profileFields = { country: 'country', city: 'city', address: 'address', guardianName: 'guardian_name', guardianPhone: 'guardian_phone', studentNumber: 'student_number', learningGoals: 'learning_goals' };
+    for (const [key, column] of Object.entries(profileFields)) {
+      if (req.body[key] === undefined) continue;
+      if (typeof req.body[key] !== 'string' || req.body[key].length > 1000) {
+        return res.status(400).json({ error: `Invalid ${key}` });
+      }
+      updates.push(`${column} = ?`);
+      values.push(req.body[key].trim());
+    }
+
+    if (phone !== undefined) {
+      if (!/^(?:(?:077|088)\d{7}|\+[1-9]\d{7,14})$/.test(phone)) {
+        return res.status(400).json({ error: 'Enter a valid local or international phone number' });
+      }
+      const phoneInUse = db.prepare('SELECT id FROM users WHERE phone = ? AND id != ?').get(phone, req.user.id);
+      if (phoneInUse) return res.status(400).json({ error: 'Phone number is already registered' });
+      updates.push('phone = ?');
+      values.push(phone);
+    }
+
+    if (email !== undefined) {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail && !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+        return res.status(400).json({ error: 'Enter a valid email address' });
+      }
+      const emailInUse = normalizedEmail
+        ? db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(normalizedEmail, req.user.id)
+        : null;
+      if (emailInUse) return res.status(400).json({ error: 'Email address is already registered' });
+      updates.push('email = ?');
+      values.push(normalizedEmail || null);
+    }
 
     if (firstName) {
       updates.push('first_name = ?');
@@ -140,4 +183,3 @@ router.get('/counselors/list', authenticate, (req, res) => {
 });
 
 export default router;
-

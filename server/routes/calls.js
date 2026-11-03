@@ -7,19 +7,22 @@ const router = express.Router();
 // Create call history entry
 router.post('/history', authenticate, (req, res) => {
   try {
-    const { receiverId, callerId, callType, status } = req.body;
+    const { receiverId, callType } = req.body;
+    const caller_id = req.user.id;
+    const receiver_id = Number(receiverId);
     
-    const caller_id = callerId || req.user.id;
-    const receiver_id = receiverId || req.body.receiverId;
-    
-    if (!receiver_id || !callType) {
+    if (!Number.isInteger(receiver_id) || receiver_id <= 0 || !['voice', 'video'].includes(callType)) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    if (receiver_id === caller_id) return res.status(400).json({ error: 'You cannot call yourself' });
+
+    const receiver = db.prepare('SELECT id FROM users WHERE id = ? AND is_disabled = 0').get(receiver_id);
+    if (!receiver) return res.status(404).json({ error: 'Call recipient not found' });
 
     const result = db.prepare(`
       INSERT INTO call_history (caller_id, receiver_id, call_type, status)
       VALUES (?, ?, ?, ?)
-    `).run(caller_id, receiver_id, callType, status || 'ongoing');
+    `).run(caller_id, receiver_id, callType, 'ongoing');
 
     res.status(201).json({ 
       message: 'Call history created', 
@@ -27,6 +30,39 @@ router.post('/history', authenticate, (req, res) => {
     });
   } catch (error) {
     console.error('Create call history error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update one specific call. A user may only update a call they participate in.
+router.patch('/history/:id', authenticate, (req, res) => {
+  try {
+    const callId = Number(req.params.id);
+    const { status, duration, endedAt } = req.body;
+    const validStatuses = ['missed', 'answered', 'rejected', 'cancelled', 'ongoing'];
+    if (!Number.isInteger(callId) || callId <= 0) return res.status(400).json({ error: 'Invalid call ID' });
+    if (status !== undefined && !validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid call status' });
+    if (duration !== undefined && (!Number.isFinite(Number(duration)) || Number(duration) < 0)) {
+      return res.status(400).json({ error: 'Invalid call duration' });
+    }
+
+    const call = db.prepare('SELECT * FROM call_history WHERE id = ?').get(callId);
+    if (!call) return res.status(404).json({ error: 'Call history not found' });
+    if (call.caller_id !== req.user.id && call.receiver_id !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    db.prepare(`
+      UPDATE call_history SET status = ?, duration = ?, ended_at = ? WHERE id = ?
+    `).run(
+      status ?? call.status,
+      duration !== undefined ? Number(duration) : call.duration,
+      endedAt ?? call.ended_at,
+      callId
+    );
+    res.json({ message: 'Call history updated', updated: true, callId });
+  } catch (error) {
+    console.error('Update call history error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -116,4 +152,3 @@ router.get('/history/:userId', authenticate, (req, res) => {
 });
 
 export default router;
-

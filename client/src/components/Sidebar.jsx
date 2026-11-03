@@ -37,11 +37,11 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     // Exact match
     if (location.pathname === path) return true;
     
-    // For dashboard route, highlight if we're on any sub-route of that role (except profile)
+    // Dashboard is only active on its own route. Each sub-route has a dedicated
+    // navigation item, so treating all of them as the dashboard caused two items
+    // to appear selected at once.
     if (path.includes('/dashboard')) {
-      const role = path.split('/')[1]; // e.g., 'student', 'counselor', 'admin'
-      return location.pathname.startsWith(`/${role}/`) && 
-             !location.pathname.includes('/profile');
+      return location.pathname === path;
     }
     
     // For other routes, check if current path starts with the menu path
@@ -54,6 +54,7 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     { path: '/student/appointments', icon: Calendar, label: 'Appointments' },
     { path: '/student/learning', icon: BookOpen, label: 'Learning Portal' },
     { path: '/student/grades', icon: Award, label: 'My Grades' },
+    { path: '/student/payments', icon: FileText, label: 'Subscription & Receipts' },
     { path: '/student/sessions', icon: MessageSquare, label: 'Live Sessions' },
     { path: '/chat', icon: MessageSquare, label: 'Chat' },
     { path: '/student/careers', icon: ClipboardList, label: 'Career Explorer' },
@@ -68,6 +69,7 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     { path: '/counselor/materials', icon: FileText, label: 'Learning Materials' },
     { path: '/counselor/grading', icon: Award, label: 'Grading' },
     { path: '/counselor/sessions', icon: MessageSquare, label: 'Live Sessions' },
+    { path: '/chat', icon: MessageSquare, label: 'Messages' },
     { path: '/counselor/reports', icon: BarChart3, label: 'Reports' },
     { path: '/counselor/profile', icon: User, label: 'My Profile' },
   ];
@@ -79,10 +81,12 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     { path: '/admin/students', icon: Users, label: 'Students' },
     { path: '/admin/counselors', icon: Users, label: 'Counselors' },
     { path: '/admin/appointments', icon: Calendar, label: 'Appointments' },
+    { path: '/admin/schedules', icon: Calendar, label: 'Schedules' },
     { path: '/admin/sessions', icon: MessageSquare, label: 'Live Sessions' },
     { path: '/admin/reports', icon: FileText, label: 'Counselor Reports' },
     { path: '/admin/careers', icon: BookOpen, label: 'Career Management' },
     { path: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
+    { path: '/admin/payments', icon: FileText, label: 'Payments & Invoices' },
     { path: '/admin/profile', icon: User, label: 'My Profile' },
   ];
 
@@ -137,6 +141,7 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
 
       <div className="p-4 border-t">
         <button
+          type="button"
           onClick={handleLogout}
           className="flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full transition-colors"
         >
@@ -148,4 +153,3 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     </>
   );
 }
-

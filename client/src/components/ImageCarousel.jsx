@@ -65,7 +65,7 @@ const ImageCarousel = ({ images, autoPlayInterval = 4000 }) => {
   if (images.length === 0) return null;
 
   return (
-    <div className="relative w-full h-[500px] md:h-[600px] lg:h-[700px] overflow-hidden rounded-2xl shadow-2xl group">
+    <div className="relative w-full h-[280px] sm:h-[420px] md:h-[600px] lg:h-[700px] overflow-hidden rounded-2xl shadow-2xl group">
       <AnimatePresence initial={false} custom={direction} mode="wait">
         <motion.div
           key={currentIndex}
@@ -107,15 +107,17 @@ const ImageCarousel = ({ images, autoPlayInterval = 4000 }) => {
       {images.length > 1 && (
         <>
           <button
+            type="button"
             onClick={goToPrevious}
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
+            className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-300 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110"
             aria-label="Previous slide"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
           <button
+            type="button"
             onClick={goToNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
+            className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-300 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110"
             aria-label="Next slide"
           >
             <ChevronRight className="w-6 h-6" />
@@ -127,7 +129,8 @@ const ImageCarousel = ({ images, autoPlayInterval = 4000 }) => {
       {images.length > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex space-x-2">
           {images.map((_, index) => (
-            <button
+              <button
+                type="button"
               key={index}
               onClick={() => goToSlide(index)}
               className={`transition-all duration-300 rounded-full ${
@@ -158,4 +161,3 @@ const ImageCarousel = ({ images, autoPlayInterval = 4000 }) => {
 };
 
 export default ImageCarousel;
-

@@ -154,8 +154,8 @@ export default function CalendarView({
   // Custom toolbar with view switcher
   const CustomToolbar = ({ label, onNavigate, onView }) => {
     return (
-      <div className="flex items-center justify-between mb-4 p-4 bg-white rounded-lg shadow-sm">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-col gap-3 mb-4 p-3 sm:p-4 bg-white rounded-lg shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => onNavigate('PREV')}
             className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 font-medium"
@@ -175,8 +175,8 @@ export default function CalendarView({
             Next ›
           </button>
         </div>
-        <h2 className="text-xl font-bold text-gray-900">{label}</h2>
-        <div className="flex items-center space-x-2">
+        <h2 className="text-base sm:text-xl font-bold text-gray-900 order-first lg:order-none">{label}</h2>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => onView('month')}
             className={`px-4 py-2 rounded-lg font-medium ${
@@ -269,7 +269,7 @@ export default function CalendarView({
       </div>
 
       {/* Calendar */}
-      <div style={{ height: '600px' }} className="bg-white rounded-lg p-4">
+      <div style={{ height: 'min(600px, 70vh)' }} className="bg-white rounded-lg p-2 sm:p-4 overflow-x-auto">
         <Calendar
           localizer={localizer}
           events={events}
@@ -291,7 +291,7 @@ export default function CalendarView({
       </div>
 
       {/* Event Count Summary */}
-      <div className="mt-4 grid grid-cols-3 gap-4">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-blue-50 p-3 rounded-lg">
           <div className="flex items-center space-x-2">
             <CalendarIcon className="w-5 h-5 text-blue-600" />
@@ -329,4 +329,3 @@ export default function CalendarView({
     </motion.div>
   );
 }
-

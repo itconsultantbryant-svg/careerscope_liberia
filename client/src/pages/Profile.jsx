@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import api from '../utils/api';
+import api, { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -50,13 +50,17 @@ export default function Profile() {
         yearsOfExperience: user.years_of_experience || '',
         industrySpecialty: user.industry_specialty || '',
         organization: user.organization || '',
+        country: user.country || 'Liberia',
+        city: user.city || '',
+        address: user.address || '',
+        guardianName: user.guardian_name || '',
+        guardianPhone: user.guardian_phone || '',
+        studentNumber: user.student_number || '',
+        learningGoals: user.learning_goals || '',
       });
       if (user.profile_image) {
         // Ensure profile image URL is absolute
-        const imageUrl = user.profile_image.startsWith('http') 
-          ? user.profile_image 
-          : `http://localhost:5000${user.profile_image}`;
-        setPreviewImage(imageUrl);
+        setPreviewImage(assetUrl(user.profile_image));
       }
     }
   }, [user]);
@@ -64,8 +68,8 @@ export default function Profile() {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB');
+      if (file.size > 3 * 1024 * 1024) {
+        toast.error('Image size must be less than 3MB');
         return;
       }
       setProfileImage(file);
@@ -87,6 +91,11 @@ export default function Profile() {
       // Add text fields - map to backend field names
       if (formData.firstName) formDataToSend.append('firstName', formData.firstName);
       if (formData.lastName) formDataToSend.append('lastName', formData.lastName);
+      formDataToSend.append('phone', formData.phone);
+      formDataToSend.append('email', formData.email);
+      for (const key of ['country', 'city', 'address', 'guardianName', 'guardianPhone', 'studentNumber', 'learningGoals']) {
+        formDataToSend.append(key, formData[key] || '');
+      }
       if (formData.bio !== undefined) formDataToSend.append('bio', formData.bio);
       if (formData.county) formDataToSend.append('county', formData.county);
       if (formData.schoolName) formDataToSend.append('schoolName', formData.schoolName);
@@ -107,10 +116,7 @@ export default function Profile() {
 
       // Update preview image with absolute URL if profile image was updated
       if (res.data.user && res.data.user.profile_image) {
-        const imageUrl = res.data.user.profile_image.startsWith('http') 
-          ? res.data.user.profile_image 
-          : `http://localhost:5000${res.data.user.profile_image}`;
-        setPreviewImage(imageUrl);
+        setPreviewImage(assetUrl(res.data.user.profile_image));
       }
 
       toast.success('Profile updated successfully!');
@@ -178,7 +184,7 @@ export default function Profile() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-2">
-                    Upload a profile picture (max 5MB)
+                    Upload a profile picture (max 3MB)
                   </p>
                   <p className="text-xs text-gray-500">
                     JPG, PNG or GIF. Recommended size: 400x400px
@@ -188,7 +194,19 @@ export default function Profile() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {[
+                  ['country', 'Country', 'country-name'], ['city', 'City / Town', 'address-level2'],
+                  ['address', 'Address', 'street-address'],
+                  ...(user.role === 'student' ? [['studentNumber', 'Student number', 'off'], ['guardianName', 'Parent / Guardian name', 'off'], ['guardianPhone', 'Parent / Guardian phone', 'off'], ['learningGoals', 'Learning and career goals', 'off']] : []),
+                ].map(([key, label, autoComplete]) => (
+                  <div key={key}>
+                    <label htmlFor={`profile-${key}`} className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+                    <input id={`profile-${key}`} value={formData[key] || ''} autoComplete={autoComplete} maxLength={1000} className="input-field" onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     First Name *
@@ -215,7 +233,7 @@ export default function Profile() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Phone Number
@@ -242,18 +260,20 @@ export default function Profile() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  County
+                  State / County
                 </label>
-                <select
+                <input
                   value={formData.county}
                   onChange={(e) => setFormData({ ...formData, county: e.target.value })}
                   className="input-field"
-                >
-                  <option value="">Select County</option>
+                  list="profile-counties"
+                  autoComplete="address-level1"
+                />
+                <datalist id="profile-counties">
                   {counties.map((county) => (
                     <option key={county} value={county}>{county}</option>
                   ))}
-                </select>
+                </datalist>
               </div>
 
               {/* Student-specific fields */}
@@ -301,7 +321,7 @@ export default function Profile() {
                       placeholder="e.g., BSc in Psychology"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Years of Experience
@@ -354,7 +374,7 @@ export default function Profile() {
                 />
               </div>
 
-              <div className="flex space-x-4 pt-4">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row pt-4">
                 <button
                   type="submit"
                   disabled={loading}
@@ -380,4 +400,3 @@ export default function Profile() {
     </div>
   );
 }
-

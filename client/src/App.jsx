@@ -1,19 +1,29 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { Toaster } from 'sonner';
 
 // Pages
-import Home from './pages/Home';
-import Login from './pages/Login';
-import StudentDashboard from './pages/StudentDashboard';
-import CounselorDashboard from './pages/CounselorDashboard';
-import AdminDashboard from './pages/AdminDashboard';
-import Community from './pages/Community';
-import Careers from './pages/Careers';
-import CareerDetail from './pages/CareerDetail';
-import Profile from './pages/Profile';
-import ChatPage from './pages/ChatPage';
+const Home = lazy(() => import('./pages/Home'));
+const Login = lazy(() => import('./pages/Login'));
+const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
+const CounselorDashboard = lazy(() => import('./pages/CounselorDashboard'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const Community = lazy(() => import('./pages/Community'));
+const Careers = lazy(() => import('./pages/Careers'));
+const CareerDetail = lazy(() => import('./pages/CareerDetail'));
+const Profile = lazy(() => import('./pages/Profile'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const Payments = lazy(() => import('./pages/Payments'));
+
+function RouteLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" role="status" aria-label="Loading page">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+    </div>
+  );
+}
 
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles = [] }) {
@@ -42,6 +52,7 @@ function AppRoutes() {
   const { user } = useAuth();
 
   return (
+    <Suspense fallback={<RouteLoader />}>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={user ? <Navigate to={`/${user.role}/dashboard`} replace /> : <Login />} />
@@ -274,7 +285,7 @@ function AppRoutes() {
       <Route
         path="/chat"
         element={
-          <ProtectedRoute allowedRoles={['student']}>
+          <ProtectedRoute allowedRoles={['student', 'counselor']}>
             <ChatPage />
           </ProtectedRoute>
         }
@@ -306,7 +317,11 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/student/payments" element={<ProtectedRoute allowedRoles={['student']}><Payments /></ProtectedRoute>} />
+      <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['admin']}><Payments /></ProtectedRoute>} />
     </Routes>
+    </Suspense>
   );
 }
 

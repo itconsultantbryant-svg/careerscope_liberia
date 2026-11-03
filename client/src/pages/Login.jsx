@@ -11,7 +11,7 @@ import Footer from '../components/Footer';
 
 const loginSchema = z.object({
   phone: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().email().optional().or(z.literal('')),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   role: z.enum(['student', 'counselor', 'admin']),
 }).refine((data) => data.phone || data.email, {
@@ -24,13 +24,14 @@ const studentSchema = z.object({
   lastName: z.string().min(2, 'Last name is required'),
   gender: z.string().optional(),
   dateOfBirth: z.string().optional(),
-  phone: z.string().regex(/^(077|088)\d{7}$/, 'Invalid Liberian phone number (077xxxxxx or 088xxxxxx)'),
+  phone: z.string().trim().regex(/^(?:(?:077|088)\d{7}|\+[1-9]\d{7,14})$/, 'Use a Liberian number or international format, e.g. +231…'),
   email: z.string().email().optional().or(z.literal('')),
   county: z.string().min(1, 'County is required'),
+  country: z.string().min(1, 'Country is required'),
   schoolName: z.string().min(1, 'School name is required'),
   gradeLevel: z.number().min(7).max(12),
   dreamCareers: z.array(z.number()).optional(),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(72),
 });
 
 
@@ -53,7 +54,7 @@ export default function Login() {
 
   const studentForm = useForm({
     resolver: zodResolver(studentSchema),
-    defaultValues: { gradeLevel: 7, dreamCareers: [] },
+    defaultValues: { gradeLevel: 7, dreamCareers: [], country: 'Liberia' },
   });
 
 
@@ -130,12 +131,14 @@ export default function Login() {
                 </div>
                 
                 {/* Role Selection */}
-                <div className="flex space-x-4 mb-6">
+                <div className="grid grid-cols-3 gap-2 mb-6" role="group" aria-label="Choose account type">
                   {['student', 'counselor', 'admin'].map((role) => (
                     <button
                       key={role}
                       onClick={() => setLoginRole(role)}
-                      className={`px-4 py-2 rounded-lg font-medium capitalize ${
+                      type="button"
+                      aria-pressed={loginRole === role}
+                      className={`min-h-11 px-2 py-2 rounded-lg font-medium capitalize ${
                         loginRole === role
                           ? 'bg-primary-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -176,6 +179,7 @@ export default function Login() {
                       placeholder="your@email.com"
                       className="input-field"
                     />
+                    {loginForm.formState.errors.email && <p role="alert" className="text-red-600 text-sm mt-1">{loginForm.formState.errors.email.message}</p>}
                   </div>
 
                   <div>
@@ -220,8 +224,12 @@ export default function Login() {
                 </div>
 
                 {/* Student Registration */}
-                <form onSubmit={studentForm.handleSubmit(onStudentRegister)} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={studentForm.handleSubmit(onStudentRegister, (errors) => toast.error(Object.values(errors)[0]?.message || 'Please check the registration fields'))} className="space-y-4">
+                  <div>
+                    <label htmlFor="registration-country" className="block text-sm font-medium text-gray-700 mb-2">Country *</label>
+                    <input id="registration-country" {...studentForm.register('country')} autoComplete="country-name" className="input-field" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         First Name *
@@ -238,7 +246,7 @@ export default function Login() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number * (077xxxxxx or 088xxxxxx)
+                      Phone Number * (local or +country code)
                     </label>
                     <input {...studentForm.register('phone')} className="input-field" />
                   </div>
@@ -252,14 +260,14 @@ export default function Login() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      County *
+                      State / County *
                     </label>
-                    <select {...studentForm.register('county')} className="input-field">
-                      <option value="">Select County</option>
+                    <input {...studentForm.register('county')} list="registration-counties" autoComplete="address-level1" placeholder="State or county" className="input-field" />
+                    <datalist id="registration-counties">
                       {counties.map((county) => (
                         <option key={county} value={county}>{county}</option>
                       ))}
-                    </select>
+                    </datalist>
                   </div>
 
                   <div>
@@ -311,4 +319,3 @@ export default function Login() {
     </div>
   );
 }
-

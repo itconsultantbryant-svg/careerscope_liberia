@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../db/init.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -10,17 +10,50 @@ router.get('/', (req, res) => {
   res.json({ careers });
 });
 
+// Student career-interest routes must be registered before /:id.
+router.get('/student/interests', authenticate, requireRole('student'), (req, res) => {
+  const interests = db.prepare(`
+    SELECT c.* FROM careers c
+    INNER JOIN student_career_interests sci ON c.id = sci.career_id
+    WHERE sci.student_id = ?
+  `).all(req.user.id);
+
+  res.json({ interests });
+});
+
+router.post('/student/interests', authenticate, requireRole('student'), (req, res) => {
+  try {
+    const { careerId } = req.body;
+    if (!careerId) return res.status(400).json({ error: 'Career ID required' });
+    const career = db.prepare('SELECT id FROM careers WHERE id = ?').get(careerId);
+    if (!career) return res.status(404).json({ error: 'Career not found' });
+    db.prepare('INSERT OR IGNORE INTO student_career_interests (student_id, career_id) VALUES (?, ?)').run(req.user.id, careerId);
+    res.json({ message: 'Career interest added' });
+  } catch (error) {
+    console.error('Add interest error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/student/interests/:careerId', authenticate, requireRole('student'), (req, res) => {
+  db.prepare('DELETE FROM student_career_interests WHERE student_id = ? AND career_id = ?').run(req.user.id, req.params.careerId);
+  res.json({ message: 'Career interest removed' });
+});
+
 // Get single career (public)
 router.get('/:id', (req, res) => {
   const career = db.prepare('SELECT * FROM careers WHERE id = ?').get(req.params.id);
-  
+
   if (!career) {
     return res.status(404).json({ error: 'Career not found' });
   }
 
   // Get counselors assigned to this career
   const counselors = db.prepare(`
-    SELECT users.* FROM users
+    SELECT users.id, users.first_name, users.last_name, users.county,
+           users.qualification, users.years_of_experience, users.industry_specialty,
+           users.organization, users.bio, users.profile_image
+    FROM users
     INNER JOIN counselor_career_paths
       ON users.id = counselor_career_paths.counselor_id
     WHERE users.role = 'counselor'
@@ -34,47 +67,4 @@ router.get('/:id', (req, res) => {
   res.json({ career, counselors });
 });
 
-// Get student's career interests
-router.get('/student/interests', authenticate, (req, res) => {
-  const interests = db.prepare(`
-    SELECT c.* FROM careers c
-    INNER JOIN student_career_interests sci ON c.id = sci.career_id
-    WHERE sci.student_id = ?
-  `).all(req.user.id);
-
-  res.json({ interests });
-});
-
-// Add career interest
-router.post('/student/interests', authenticate, (req, res) => {
-  try {
-    const { careerId } = req.body;
-
-    if (!careerId) {
-      return res.status(400).json({ error: 'Career ID required' });
-    }
-
-    db.prepare(`
-      INSERT OR IGNORE INTO student_career_interests (student_id, career_id)
-      VALUES (?, ?)
-    `).run(req.user.id, careerId);
-
-    res.json({ message: 'Career interest added' });
-  } catch (error) {
-    console.error('Add interest error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Remove career interest
-router.delete('/student/interests/:careerId', authenticate, (req, res) => {
-  db.prepare(`
-    DELETE FROM student_career_interests 
-    WHERE student_id = ? AND career_id = ?
-  `).run(req.user.id, req.params.careerId);
-
-  res.json({ message: 'Career interest removed' });
-});
-
 export default router;
-

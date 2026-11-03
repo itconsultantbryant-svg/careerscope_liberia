@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -59,11 +60,11 @@ export default function CounselorDashboard() {
 
   useEffect(() => {
     fetchData();
-    // Real-time updates every 10 seconds
+    // Use polling only as a fallback for data that is not socket-driven.
     const interval = setInterval(() => {
       fetchData();
       setLastUpdate(new Date());
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -253,7 +254,8 @@ export default function CounselorDashboard() {
               {activeSection === 'materials' && 'Learning Materials'}
               {activeSection === 'grading' && 'Grading'}
               {activeSection === 'sessions' && 'Live Sessions'}
-              {activeSection === 'reports' && 'Reports'}
+               {activeSection === 'reports' && 'Reports'}
+               {activeSection === 'calendar' && 'Calendar'}
             </h1>
             <p className="text-gray-600">
               {activeSection === 'appointments' && 'Manage appointment requests and scheduled sessions'}
@@ -681,7 +683,7 @@ export default function CounselorDashboard() {
                   <div className="flex items-center space-x-3 mb-3">
                     <div className="w-12 h-12 bg-primary-200 rounded-full flex items-center justify-center">
                       {student.profile_image ? (
-                        <img src={student.profile_image} alt={student.first_name} className="w-12 h-12 rounded-full" />
+                        <img src={assetUrl(student.profile_image)} alt={student.first_name} className="w-12 h-12 rounded-full" />
                       ) : (
                         <User className="w-6 h-6 text-primary-600" />
                       )}

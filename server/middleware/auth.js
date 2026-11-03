@@ -1,4 +1,10 @@
 import jwt from 'jsonwebtoken';
+import { db } from '../db/init.js';
+
+const activeUser = (decoded) => {
+  const user = db.prepare('SELECT id, role, is_disabled, is_approved FROM users WHERE id = ?').get(decoded.id);
+  return user && !user.is_disabled && (user.role !== 'counselor' || user.is_approved) ? { ...decoded, role: user.role } : null;
+};
 
 export const authenticate = (req, res, next) => {
   const token = req.cookies.token;
@@ -9,7 +15,8 @@ export const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-    req.user = decoded;
+    req.user = activeUser(decoded);
+    if (!req.user) return res.status(401).json({ error: 'Account unavailable or disabled' });
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Unauthorized - Invalid token' });
@@ -27,7 +34,7 @@ export const optionalAuth = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-    req.user = decoded;
+    req.user = activeUser(decoded);
     next();
   } catch (error) {
     req.user = null;
@@ -48,4 +55,3 @@ export const requireRole = (...roles) => {
     next();
   };
 };
-

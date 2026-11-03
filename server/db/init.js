@@ -10,7 +10,7 @@ const __dirname = dirname(__filename);
 
 // Use server directory for database (more reliable for deployment)
 // Prefer server directory, fallback to project root
-let dbPath = join(__dirname, '../sqlite.db'); // server/sqlite.db (preferred for deployment)
+let dbPath = process.env.DATABASE_PATH || join(__dirname, '../sqlite.db');
 
 // Ensure directory exists
 const dbDir = dirname(dbPath);
@@ -66,6 +66,9 @@ export function initDatabase() {
     if (!userColumnNames.includes('is_disabled')) {
       console.log('Adding is_disabled column to users...');
       db.exec("ALTER TABLE users ADD COLUMN is_disabled BOOLEAN DEFAULT 0");
+    }
+    for (const [name, type] of Object.entries({ country: "TEXT DEFAULT 'Liberia'", city: 'TEXT', address: 'TEXT', guardian_name: 'TEXT', guardian_phone: 'TEXT', student_number: 'TEXT', learning_goals: 'TEXT', subscription_expires_at: 'TEXT' })) {
+      if (!userColumnNames.includes(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
     }
   } catch (error) {
     console.error('Users migration error:', error.message);
@@ -392,6 +395,64 @@ export function initDatabase() {
 
   // Career Assessment Quiz Questions
   db.exec(`
+    CREATE TABLE IF NOT EXISTS billing_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reference TEXT NOT NULL UNIQUE,
+      school_name TEXT NOT NULL,
+      contact_email TEXT,
+      currency TEXT NOT NULL,
+      total_minor INTEGER NOT NULL CHECK(total_minor > 0),
+      status TEXT NOT NULL DEFAULT 'issued' CHECK(status IN ('issued', 'paid')),
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS billing_invoice_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES billing_invoices(id),
+      student_id INTEGER NOT NULL REFERENCES users(id),
+      amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+      UNIQUE(invoice_id, student_id)
+    );
+    CREATE TABLE IF NOT EXISTS billing_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reference TEXT NOT NULL UNIQUE,
+      invoice_id INTEGER REFERENCES billing_invoices(id),
+      submitted_by INTEGER NOT NULL REFERENCES users(id),
+      currency TEXT NOT NULL,
+      total_minor INTEGER NOT NULL CHECK(total_minor > 0),
+      method TEXT NOT NULL,
+      provider_reference TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+      review_note TEXT,
+      reviewed_by INTEGER REFERENCES users(id),
+      reviewed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS billing_allocations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_id INTEGER NOT NULL REFERENCES billing_payments(id),
+      student_id INTEGER NOT NULL REFERENCES users(id),
+      amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+      UNIQUE(payment_id, student_id)
+    );
+    CREATE TABLE IF NOT EXISTS billing_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reference TEXT NOT NULL UNIQUE,
+      allocation_id INTEGER NOT NULL UNIQUE REFERENCES billing_allocations(id),
+      issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS billing_allocations_student ON billing_allocations(student_id);
+  `);
+
+  // Career Assessment Quiz Questions
+  for (const table of ['billing_payments', 'billing_invoices']) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name);
+    if (!columns.includes('academic_year')) db.exec(`ALTER TABLE ${table} ADD COLUMN academic_year TEXT NOT NULL DEFAULT 'Academic year (12 months)'`);
+    if (!columns.includes('company_snapshot')) db.exec(`ALTER TABLE ${table} ADD COLUMN company_snapshot TEXT`);
+  }
+
+  // Career Assessment Quiz Questions
+  db.exec(`
     CREATE TABLE IF NOT EXISTS quiz_questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       question TEXT NOT NULL,
@@ -701,4 +762,3 @@ export function initDatabase() {
 
   console.log('✅ Database initialized successfully');
 }
-

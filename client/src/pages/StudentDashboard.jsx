@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -57,11 +58,12 @@ export default function StudentDashboard() {
     if (activeSection !== 'careers') {
       checkQuizCompletion();
       fetchData();
-      // Poll for updates every 10 seconds for real-time experience
+      // Socket events handle instant chat/community updates. Use a modest
+      // fallback interval for dashboard data to preserve mobile data and battery.
       const interval = setInterval(() => {
         fetchData();
         setLastUpdate(new Date());
-      }, 10000);
+      }, 30000);
       return () => clearInterval(interval);
     }
     setSidebarOpen(false);
@@ -378,7 +380,8 @@ export default function StudentDashboard() {
               {activeSection === 'appointments' && 'My Appointments'}
               {activeSection === 'learning' && 'Learning Portal'}
               {activeSection === 'grades' && 'My Grades'}
-              {activeSection === 'sessions' && 'Live Sessions'}
+               {activeSection === 'sessions' && 'Live Sessions'}
+               {activeSection === 'calendar' && 'Calendar'}
             </h1>
             <p className="text-gray-600">
               {activeSection === 'appointments' && 'View and manage your counseling appointments'}
@@ -617,7 +620,7 @@ export default function StudentDashboard() {
                     <div className="flex items-center space-x-3 mb-3">
                       <div className="w-12 h-12 bg-primary-200 rounded-full flex items-center justify-center">
                         {counselor.profile_image ? (
-                          <img src={counselor.profile_image} alt={counselor.first_name} className="w-12 h-12 rounded-full" />
+                          <img src={assetUrl(counselor.profile_image)} alt={counselor.first_name} className="w-12 h-12 rounded-full" />
                         ) : (
                           <Users className="w-6 h-6 text-primary-600" />
                         )}

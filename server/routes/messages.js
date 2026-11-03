@@ -39,6 +39,11 @@ router.post('/', authenticate, upload.single('attachment'), (req, res) => {
     if (isNaN(receiverIdNum)) {
       return res.status(400).json({ error: 'Invalid receiver ID' });
     }
+    if (receiverIdNum === req.user.id) {
+      return res.status(400).json({ error: 'You cannot message yourself' });
+    }
+    const receiver = db.prepare('SELECT id FROM users WHERE id = ? AND is_disabled = 0').get(receiverIdNum);
+    if (!receiver) return res.status(404).json({ error: 'Message recipient not found' });
 
     // Allow empty content if there's a file attachment
     if ((!content || content.trim() === '') && !req.file) {
@@ -243,6 +248,11 @@ router.post('/:messageId/reaction', authenticate, (req, res) => {
     if (!validReactions.includes(reaction)) {
       return res.status(400).json({ error: 'Invalid reaction' });
     }
+    const message = db.prepare('SELECT sender_id, receiver_id FROM messages WHERE id = ?').get(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    if (message.sender_id !== req.user.id && message.receiver_id !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     // Check if already reacted
     const existing = db.prepare('SELECT id FROM message_reactions WHERE message_id = ? AND user_id = ?')
@@ -268,6 +278,11 @@ router.post('/:messageId/reaction', authenticate, (req, res) => {
 // Remove reaction from message
 router.delete('/:messageId/reaction', authenticate, (req, res) => {
   try {
+    const message = db.prepare('SELECT sender_id, receiver_id FROM messages WHERE id = ?').get(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    if (message.sender_id !== req.user.id && message.receiver_id !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     db.prepare('DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?')
       .run(req.params.messageId, req.user.id);
     res.json({ message: 'Reaction removed' });
@@ -278,4 +293,3 @@ router.delete('/:messageId/reaction', authenticate, (req, res) => {
 });
 
 export default router;
-

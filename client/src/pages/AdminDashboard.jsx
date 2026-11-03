@@ -104,11 +104,12 @@ export default function AdminDashboard() {
         return;
       }
       fetchData();
-      // Real-time updates every 10 seconds
+      // Poll as a fallback; a 30 second interval is substantially lighter on
+      // mobile connections while keeping management data current.
       const interval = setInterval(() => {
         fetchData();
         setLastUpdate(new Date());
-      }, 10000);
+      }, 30000);
       return () => clearInterval(interval);
     } else if (!authLoading && !user) {
       setLoading(false);
@@ -722,6 +723,22 @@ export default function AdminDashboard() {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-8">
+            <section className="grid grid-cols-1 xl:grid-cols-2 gap-6" aria-label="System analytics charts">
+              <div className="card">
+                <h2 className="text-xl font-semibold mb-4">Appointment outcomes</h2>
+                {['pending', 'accepted', 'completed', 'rejected', 'cancelled'].map((status) => {
+                  const count = appointments.filter((appointment) => appointment.status === status).length;
+                  return <div key={status} className="mb-4"><div className="flex justify-between mb-1"><span className="capitalize">{status}</span><strong>{count}</strong></div><div className="h-3 bg-gray-100 rounded-full"><div className="h-3 bg-primary-600 rounded-full" style={{ width: `${appointments.length ? count / appointments.length * 100 : 0}%` }} /></div></div>;
+                })}
+                {!appointments.length && <p className="text-sm text-gray-600">Chart updates as appointments are recorded.</p>}
+              </div>
+              <div className="card">
+                <h2 className="text-xl font-semibold mb-4">Students by state / county</h2>
+                {Object.entries(students.reduce((counts, student) => { const county = student.county || 'Not provided'; counts[county] = (counts[county] || 0) + 1; return counts; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([county, count]) => <div key={county} className="mb-4"><div className="flex justify-between gap-3 mb-1"><span>{county}</span><strong>{count}</strong></div><div className="h-3 bg-gray-100 rounded-full"><div className="h-3 bg-blue-600 rounded-full" style={{ width: `${students.length ? count / students.length * 100 : 0}%` }} /></div></div>)}
+                {!students.length && <p className="text-sm text-gray-600">No student registrations yet.</p>}
+                <Link to="/admin/payments" className="btn-secondary inline-block mt-4">Open billing & school invoices</Link>
+              </div>
+            </section>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div className="space-y-6">
                 {/* Pending Counselors */}

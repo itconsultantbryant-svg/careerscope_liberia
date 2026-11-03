@@ -20,15 +20,26 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 4 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      req.invalidFileType = true;
+      return cb(null, false);
+    }
+    cb(null, true);
+  },
+});
 
 // Create post with multiple images support
 router.post('/', authenticate, upload.array('images', 10), (req, res) => {
   try {
+    if (req.invalidFileType) return res.status(400).json({ error: 'Post uploads must be image files' });
     const { content } = req.body;
 
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ error: 'Content required' });
+    if ((!content || content.trim().length === 0) && (!req.files || req.files.length === 0)) {
+      return res.status(400).json({ error: 'Post content or an image is required' });
     }
 
     // Handle single image (backward compatibility) or multiple images
@@ -55,7 +66,7 @@ router.post('/', authenticate, upload.array('images', 10), (req, res) => {
     const result = db.prepare(`
       INSERT INTO posts (user_id, content, image_url, images)
       VALUES (?, ?, ?, ?)
-    `).run(req.user.id, content.trim(), imageUrl, imagesJson);
+    `).run(req.user.id, (content || '').trim(), imageUrl, imagesJson);
 
     const postId = result.lastInsertRowid;
 
@@ -155,7 +166,9 @@ router.get('/', authenticate, (req, res) => {
 // Like/Unlike post
 router.post('/:id/like', authenticate, (req, res) => {
   try {
-    const postId = req.params.id;
+    const postId = Number(req.params.id);
+    const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
 
     // Check if already liked
     const existing = db.prepare('SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?').get(postId, req.user.id);
@@ -183,6 +196,8 @@ router.post('/:id/comments', authenticate, (req, res) => {
     if (!content || content.trim().length === 0) {
       return res.status(400).json({ error: 'Comment content required' });
     }
+    const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
 
     // Check if parent_comment_id column exists, if not use null
     let parentId = null;
@@ -193,6 +208,10 @@ router.post('/:id/comments', authenticate, (req, res) => {
       } catch (e) {
         parentId = null;
       }
+    }
+    if (parentId) {
+      const parent = db.prepare('SELECT id FROM comments WHERE id = ? AND post_id = ?').get(parentId, req.params.id);
+      if (!parent) return res.status(400).json({ error: 'Reply must belong to the same post' });
     }
 
     const result = db.prepare(`
@@ -260,6 +279,8 @@ router.get('/:id/comments', authenticate, (req, res) => {
 router.post('/comments/:commentId/like', authenticate, (req, res) => {
   try {
     const commentId = req.params.commentId;
+    const comment = db.prepare('SELECT id FROM comments WHERE id = ?').get(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
     const existing = db.prepare('SELECT id FROM comment_likes WHERE comment_id = ? AND user_id = ?')
       .get(commentId, req.user.id);
 
@@ -279,4 +300,3 @@ router.post('/comments/:commentId/like', authenticate, (req, res) => {
 });
 
 export default router;
-

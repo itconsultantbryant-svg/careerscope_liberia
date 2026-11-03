@@ -1,70 +1,54 @@
-# CareerScope – Career Counseling Platform for Liberian High School Students
+# CareerScope Liberia
 
-**Mission**: Help Liberian students discover career paths, connect with mentors, access local opportunities, and make informed decisions after WASSCE.
+Career guidance, counselor learning support, community and subscriptions for
+Liberian students.
 
-## Tech Stack
+**Live:** https://careerscope-liberia.vercel.app
 
-- **Frontend**: React.js (Vite), Tailwind CSS, Framer Motion, Lucide Icons
-- **Backend**: Node.js + Express.js
-- **Database**: SQLite (better-sqlite3)
-- **Authentication**: JWT + HTTP-only cookies
-- **State Management**: React Context API
-- **Routing**: React Router DOM v6
-- **Forms**: React Hook Form + Zod validation
+## Stack
 
-## Project Structure
+- React/Vite, Tailwind, role-based student/counselor/admin dashboards.
+- Express API on Vercel Functions; Neon PostgreSQL database and bounded uploads.
+- JWT authentication in HTTP-only secure cookies.
+- Durable, authenticated near-real-time event delivery using a Neon cursor.
+- Manual subscription payment approval, bulk school payments, PDF invoices and
+  per-student PDF receipts.
 
-```
-/careerscope
-├── /client        → React + Vite frontend
-├── /server        → Node.js + Express + SQLite backend
-├── /shared        → Types, validation schemas
-├── /uploads       → Profile pictures, post images
-└── sqlite.db      → SQLite database file
-```
+## Development
 
-## Getting Started
+Use Node 24 (`.nvmrc`).
 
-### Install Dependencies
-
-```bash
-npm run install:all
-```
-
-### Development
-
-Run both frontend and backend concurrently:
-
-```bash
+```sh
+npm ci --include=dev
+npm ci --prefix client --include=dev
+npm ci --prefix server
+npm run build
 npm run dev
 ```
 
-Or run separately:
+Configure `server/.env` from its safe template with a Neon `DATABASE_URL` and
+strong `JWT_SECRET`. The existing workspace's ignored environment is already
+configured for Neon. Frontend: http://localhost:5173; API:
+http://localhost:5000/api/health.
 
-```bash
-# Frontend only
-npm run dev:client
+## Billing
 
-# Backend only
-npm run dev:server
+Subscription: **$20 USD per academic year**, implemented as 12 months from
+approval. Mobile Money, Orange Money, bank and VISA payments are recorded as
+external transactions pending admin verification. No live card charging is
+implied. Company address: **Sinkor, Monrovia, Liberia**.
+
+Admin: `/admin/payments` · Student: `/student/payments`.
+
+## Credentials and deployment
+
+Old documented demo passwords are disabled in production. New account passwords
+are in ignored `server/.env.accounts.local`; do not publish that file.
+
+See **[DEPLOYMENT_STATUS.md](DEPLOYMENT_STATUS.md)** for migrations, environment
+variables, operational limitations, invoice email setup and deployment commands.
+
+```sh
+npm test --prefix server
+npm run test:postgres --prefix server
 ```
-
-### Default Admin Credentials
-
-- Email: `admin@careerscope.lib`
-- Password: `Liberia2025!`
-
-## Features
-
-- 🎓 Career exploration and recommendations
-- 👥 Counselor matching and booking
-- 💬 Community feed with posts, likes, and comments
-- 📅 Appointment scheduling
-- 💰 Mobile Money payment integration (mock)
-- 📱 Mobile-first responsive design
-- 🌐 Offline support for low-internet environments
-
-## License
-
-MIT
-

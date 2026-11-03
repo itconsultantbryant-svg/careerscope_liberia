@@ -12,6 +12,11 @@ server/dist/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.preview
+.vercel/
+.neon/
+server/generated/
 
 # Database
 *.db
@@ -45,4 +50,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
-
+.vercel
+.env*
+!**/.env.example

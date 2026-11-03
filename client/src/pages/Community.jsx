@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import api from '../utils/api';
+import api, { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { 
-  Heart, MessageSquare, Send, Image as ImageIcon, 
+import {
+  Heart, MessageSquare, Send, Image as ImageIcon,
   Smile, ThumbsUp, X, MoreVertical, Share2,
   ThumbsDown, Smile as SmileIcon, Frown, Angry, Meh
 } from 'lucide-react';
@@ -35,24 +35,24 @@ export default function Community() {
 
   useEffect(() => {
     fetchPosts();
-    
+
     if (socket) {
       socket.on('post_created', (newPost) => {
-        setPosts(prev => [newPost, ...prev]);
+        setPosts(prev => prev.some((post) => post.id === newPost.id) ? prev : [newPost, ...prev]);
       });
 
       socket.on('post_like_update', (data) => {
-        setPosts(prev => prev.map(post => 
-          post.id === data.postId 
-            ? { ...post, likes_count: data.likesCount, is_liked: data.isLiked }
+        setPosts(prev => prev.map(post =>
+          post.id === data.postId
+            ? { ...post, likes_count: data.likesCount }
             : post
         ));
       });
 
       socket.on('comment_added', (data) => {
-        setPosts(prev => prev.map(post => 
-          post.id === data.postId 
-            ? { ...post, comments_count: (post.comments_count || 0) + 1 }
+        setPosts(prev => prev.map(post =>
+          post.id === data.postId
+            ? { ...post, comments_count: data.commentsCount ?? (post.comments_count || 0) + 1 }
             : post
         ));
         fetchPostComments(data.postId);
@@ -70,7 +70,7 @@ export default function Community() {
     try {
       const res = await api.get('/posts');
       const postsData = res.data.posts || [];
-      
+
       // Fetch comments for each post
       for (const post of postsData) {
         try {
@@ -80,7 +80,7 @@ export default function Community() {
           post.comments = [];
         }
       }
-      
+
       setPosts(postsData);
     } catch (error) {
       toast.error('Failed to load posts');
@@ -92,7 +92,7 @@ export default function Community() {
   const fetchPostComments = async (postId) => {
     try {
       const res = await api.get(`/posts/${postId}/comments`);
-      setPosts(prev => prev.map(post => 
+      setPosts(prev => prev.map(post =>
         post.id === postId ? { ...post, comments: res.data.comments || [] } : post
       ));
     } catch (error) {
@@ -107,7 +107,7 @@ export default function Community() {
     try {
       const formData = new FormData();
       formData.append('content', newPost.content);
-      
+
       // Append all images
       newPost.images.forEach((image) => {
         formData.append('images', image);
@@ -152,11 +152,11 @@ export default function Community() {
     if (!content.trim()) return;
     try {
       await api.post(`/posts/${postId}/comments`, { content, parentCommentId });
-      
+
       if (socket) {
         socket.emit('new_comment', { postId });
       }
-      
+
       toast.success('Comment added!');
       setCommentInputs(prev => ({ ...prev, [postId]: '' }));
       setReplyInputs(prev => ({ ...prev, [`${postId}_${parentCommentId}`]: '' }));
@@ -179,7 +179,12 @@ export default function Community() {
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
-    
+    const totalBytes = [...newPost.images, ...imageFiles].reduce((sum, file) => sum + file.size, 0);
+    if (imageFiles.some((file) => file.size > 3 * 1024 * 1024) || totalBytes > 3.5 * 1024 * 1024) {
+      toast.error('Choose images under 3MB each, with a combined size under 3.5MB.');
+      return;
+    }
+
     if (imageFiles.length === 0) {
       toast.error('Please select valid image files');
       return;
@@ -187,10 +192,10 @@ export default function Community() {
 
     // Limit to 4 images
     const filesToAdd = imageFiles.slice(0, 4 - newPost.images.length);
-    
+
     const newImages = [...newPost.images, ...filesToAdd];
     const newPreviews = [...newPost.imagePreviews];
-    
+
     filesToAdd.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -207,7 +212,7 @@ export default function Community() {
     const now = new Date();
     const postDate = new Date(date);
     const diffInSeconds = Math.floor((now - postDate) / 1000);
-    
+
     if (diffInSeconds < 60) return 'just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -226,7 +231,7 @@ export default function Community() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8">
           <h1 className="text-3xl font-bold">Community Feed</h1>
@@ -246,9 +251,9 @@ export default function Community() {
             <div className="flex items-start space-x-3 mb-4">
               <div className="w-10 h-10 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                 {user?.profile_image ? (
-                  <img 
-                    src={user.profile_image.startsWith('http') ? user.profile_image : `http://localhost:5000${user.profile_image}`} 
-                    alt={user.first_name} 
+                  <img
+                    src={assetUrl(user.profile_image)}
+                    alt={user.first_name}
                     className="w-10 h-10 rounded-full object-cover"
                     onError={(e) => {
                       e.target.style.display = 'none';
@@ -310,8 +315,8 @@ export default function Community() {
                   />
                 </label>
               </div>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="btn-primary flex items-center space-x-2"
                 disabled={!newPost.content.trim() && newPost.images.length === 0}
               >
@@ -342,7 +347,7 @@ export default function Community() {
                   <div className="flex items-start space-x-3">
                     <div className="w-12 h-12 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                       {post.author_image ? (
-                        <img src={post.author_image} alt={post.author_name} className="w-12 h-12 rounded-full object-cover" />
+                        <img src={assetUrl(post.author_image)} alt={post.author_name} className="w-12 h-12 rounded-full object-cover" />
                       ) : (
                         <span className="text-primary-600 font-semibold text-lg">
                           {post.author_name?.charAt(0)}
@@ -368,7 +373,7 @@ export default function Community() {
                 {post.images && post.images.length > 0 ? (
                   <div className={`grid gap-2 mb-4 ${post.images.length === 1 ? 'grid-cols-1' : post.images.length === 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
                     {post.images.map((imageUrl, index) => {
-                      const fullUrl = imageUrl.startsWith('http') ? imageUrl : `http://localhost:5000${imageUrl}`;
+                      const fullUrl = assetUrl(imageUrl);
                       return (
                         <img
                           key={index}
@@ -385,7 +390,7 @@ export default function Community() {
                   </div>
                 ) : post.image_url ? (
                   <img
-                    src={post.image_url.startsWith('http') ? post.image_url : `http://localhost:5000${post.image_url}`}
+                    src={assetUrl(post.image_url)}
                     alt="Post"
                     className="w-full rounded-lg mb-4 max-h-96 object-cover"
                     onError={(e) => {
@@ -412,7 +417,7 @@ export default function Community() {
 
                 {/* Post Actions */}
                 <div className="flex items-center justify-around py-2 border-b">
-                  <div 
+                  <div
                     className="relative"
                     onMouseEnter={() => setReactionMenus(prev => ({ ...prev, [post.id]: true }))}
                     onMouseLeave={() => setReactionMenus(prev => ({ ...prev, [post.id]: false }))}
@@ -486,7 +491,7 @@ export default function Community() {
                             <div key={comment.id} className="flex items-start space-x-2">
                               <div className="w-8 h-8 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                                 {comment.author_image ? (
-                                  <img src={comment.author_image} alt={comment.author_name} className="w-8 h-8 rounded-full" />
+                                    <img src={assetUrl(comment.author_image)} alt={comment.author_name} className="w-8 h-8 rounded-full" />
                                 ) : (
                                   <span className="text-primary-600 text-xs font-semibold">
                                     {comment.author_name?.charAt(0)}
@@ -516,7 +521,7 @@ export default function Community() {
                                   )}
                                   <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
                                 </div>
-                                
+
                                 {/* Replies */}
                                 {comment.replies && comment.replies.length > 0 && (
                                   <div className="ml-4 mt-2 space-y-2">
@@ -524,7 +529,7 @@ export default function Community() {
                                       <div key={reply.id} className="flex items-start space-x-2">
                                         <div className="w-6 h-6 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                                           {reply.author_image ? (
-                                            <img src={reply.author_image} alt={reply.author_name} className="w-6 h-6 rounded-full" />
+                                            <img src={assetUrl(reply.author_image)} alt={reply.author_name} className="w-6 h-6 rounded-full" />
                                           ) : (
                                             <span className="text-primary-600 text-xs font-semibold">
                                               {reply.author_name?.charAt(0)}
@@ -586,9 +591,9 @@ export default function Community() {
                       <div className="flex items-center space-x-2 pt-2 border-t">
                         <div className="w-8 h-8 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                           {user?.profile_image ? (
-                            <img 
-                              src={user.profile_image.startsWith('http') ? user.profile_image : `http://localhost:5000${user.profile_image}`} 
-                              alt={user.first_name} 
+                            <img
+                                src={assetUrl(user.profile_image)}
+                              alt={user.first_name}
                               className="w-8 h-8 rounded-full object-cover"
                               onError={(e) => {
                                 e.target.style.display = 'none';

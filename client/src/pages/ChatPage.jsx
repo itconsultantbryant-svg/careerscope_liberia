@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import api from '../utils/api';
+import api, { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -13,19 +13,19 @@ export default function ChatPage() {
   const { user } = useAuth();
   const { isConnected } = useSocket();
   const [conversations, setConversations] = useState([]);
-  const [students, setStudents] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchConversations();
-    fetchStudents();
+    fetchContacts();
     
-    // Poll for new conversations every 10 seconds
+    // Sockets deliver new messages; this is only a recovery fallback.
     const interval = setInterval(() => {
       fetchConversations();
-    }, 10000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, []);
@@ -41,12 +41,13 @@ export default function ChatPage() {
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchContacts = async () => {
     try {
-      const res = await api.get('/users/students/list');
-      setStudents(res.data.students || []);
+      const isCounselor = user?.role === 'counselor';
+      const res = await api.get(isCounselor ? '/users/students/list' : '/users/counselors/list');
+      setContacts(isCounselor ? (res.data.students || []) : (res.data.counselors || []));
     } catch (error) {
-      console.error('Failed to fetch students');
+      console.error('Failed to fetch contacts');
     }
   };
 
@@ -54,7 +55,8 @@ export default function ChatPage() {
     setSelectedUser(student);
   };
 
-  const filteredStudents = students.filter(s =>
+  const contactLabel = user?.role === 'counselor' ? 'students' : 'counselors';
+  const filteredContacts = contacts.filter(s =>
     `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -128,7 +130,7 @@ export default function ChatPage() {
                       >
                         <div className="w-12 h-12 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                           {conv.other_user_image ? (
-                            <img src={conv.other_user_image} alt={conv.other_user_name} className="w-12 h-12 rounded-full" />
+                            <img src={assetUrl(conv.other_user_image)} alt={conv.other_user_name} className="w-12 h-12 rounded-full" />
                           ) : (
                             <span className="text-primary-600 font-semibold">
                               {conv.other_user_name?.charAt(0)}
@@ -154,17 +156,17 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* Available Students */}
+                {/* Available contacts */}
                 {!selectedUser && (
                   <div className="p-2 border-t">
                     <p className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2 flex items-center space-x-2">
                       <Users className="w-4 h-4" />
                       <span>Start New Conversation</span>
                     </p>
-                    {filteredStudents.length === 0 ? (
-                      <p className="text-sm text-gray-500 px-2">No students found</p>
+                    {filteredContacts.length === 0 ? (
+                      <p className="text-sm text-gray-500 px-2">No {contactLabel} found</p>
                     ) : (
-                      filteredStudents.map((student) => (
+                      filteredContacts.map((student) => (
                         <motion.div
                           key={student.id}
                           initial={{ opacity: 0, x: -20 }}
@@ -174,7 +176,7 @@ export default function ChatPage() {
                         >
                           <div className="w-12 h-12 bg-primary-200 rounded-full flex items-center justify-center flex-shrink-0">
                             {student.profile_image ? (
-                              <img src={student.profile_image} alt={student.first_name} className="w-12 h-12 rounded-full" />
+                              <img src={assetUrl(student.profile_image)} alt={student.first_name} className="w-12 h-12 rounded-full" />
                             ) : (
                               <span className="text-primary-600 font-semibold">
                                 {student.first_name?.charAt(0)}
@@ -206,7 +208,7 @@ export default function ChatPage() {
               <div className="text-center">
                 <MessageSquare className="w-24 h-24 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-700 mb-2">Select a conversation</h3>
-                <p className="text-gray-500">Choose a student to start chatting</p>
+                <p className="text-gray-500">Choose a {user?.role === 'counselor' ? 'student' : 'counselor'} to start chatting</p>
               </div>
             </div>
           )}
@@ -217,4 +219,3 @@ export default function ChatPage() {
     </div>
   );
 }
-

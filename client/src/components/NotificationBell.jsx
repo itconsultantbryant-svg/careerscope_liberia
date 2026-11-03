@@ -80,8 +80,11 @@ export default function NotificationBell() {
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 text-gray-700 hover:text-primary-600 transition-colors"
+        aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        aria-expanded={isOpen}
       >
         <Bell className="w-6 h-6" />
         {unreadCount > 0 && (
@@ -97,12 +100,13 @@ export default function NotificationBell() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border z-50 max-h-96 overflow-y-auto"
+            className="fixed inset-x-3 top-16 mt-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:w-80 bg-white rounded-lg shadow-xl border z-50 max-h-[calc(100vh-5rem)] overflow-y-auto"
           >
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold">Notifications</h3>
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={markAllAsRead}
                   className="text-sm text-primary-600 hover:text-primary-700"
                 >
@@ -148,4 +152,3 @@ export default function NotificationBell() {
     </div>
   );
 }
-

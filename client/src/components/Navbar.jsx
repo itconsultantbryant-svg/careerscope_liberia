@@ -94,8 +94,12 @@ export default function Navbar({ showSidebarToggle = false, sidebarOpen = false,
 
           {/* Mobile Menu Button */}
           <button
+            type="button"
             className="md:hidden text-gray-700"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -111,7 +115,7 @@ export default function Navbar({ showSidebarToggle = false, sidebarOpen = false,
             exit={{ opacity: 0, height: 0 }}
             className="md:hidden bg-white border-t"
           >
-            <div className="px-4 py-4 space-y-3">
+            <div id="mobile-navigation" className="px-4 py-4 space-y-3">
               <Link
                 to="/"
                 className="block text-gray-700 hover:text-primary-600 font-medium"
@@ -146,9 +150,12 @@ export default function Navbar({ showSidebarToggle = false, sidebarOpen = false,
               )}
               {user ? (
                 <div className="pt-4 border-t space-y-3">
-                  <div className="flex items-center space-x-2 text-gray-700">
-                    <User className="w-5 h-5" />
-                    <span className="font-medium">{user.first_name} {user.last_name}</span>
+                  <div className="flex items-center justify-between gap-3 text-gray-700">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <User className="w-5 h-5 flex-shrink-0" />
+                      <span className="font-medium truncate">{user.first_name} {user.last_name}</span>
+                    </div>
+                    <NotificationBell />
                   </div>
                   <button
                     onClick={() => {
@@ -177,4 +184,3 @@ export default function Navbar({ showSidebarToggle = false, sidebarOpen = false,
     </nav>
   );
 }
-

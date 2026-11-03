@@ -20,11 +20,22 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      req.invalidFileType = true;
+      return cb(null, false);
+    }
+    cb(null, true);
+  },
+});
 
 // Create group
 router.post('/', authenticate, upload.single('image'), (req, res) => {
   try {
+    if (req.invalidFileType) return res.status(400).json({ error: 'Group image must be an image file' });
     const { name, description } = req.body;
 
     if (!name || name.trim().length === 0) {
@@ -69,6 +80,8 @@ router.get('/', authenticate, (req, res) => {
 // Join group
 router.post('/:id/join', authenticate, (req, res) => {
   try {
+    const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
     db.prepare(`
       INSERT OR IGNORE INTO group_members (group_id, user_id)
       VALUES (?, ?)
@@ -83,6 +96,8 @@ router.post('/:id/join', authenticate, (req, res) => {
 
 // Leave group
 router.post('/:id/leave', authenticate, (req, res) => {
+  const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
   db.prepare(`
     DELETE FROM group_members 
     WHERE group_id = ? AND user_id = ?
@@ -100,6 +115,8 @@ router.post('/:id/messages', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Message content required' });
     }
 
+    const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
     // Check if user is member
     const isMember = db.prepare('SELECT id FROM group_members WHERE group_id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!isMember) {
@@ -120,6 +137,8 @@ router.post('/:id/messages', authenticate, (req, res) => {
 
 // Get group messages
 router.get('/:id/messages', authenticate, (req, res) => {
+  const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
   // Check if user is member
   const isMember = db.prepare('SELECT id FROM group_members WHERE group_id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!isMember) {
@@ -140,4 +159,3 @@ router.get('/:id/messages', authenticate, (req, res) => {
 });
 
 export default router;
-

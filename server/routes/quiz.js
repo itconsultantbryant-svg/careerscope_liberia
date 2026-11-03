@@ -5,13 +5,13 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 const router = express.Router();
 
 // Get career assessment quiz questions
-router.get('/career-assessment', authenticate, (req, res) => {
+router.get('/career-assessment', authenticate, requireRole('student'), (req, res) => {
   const questions = db.prepare('SELECT * FROM quiz_questions ORDER BY id').all();
   res.json({ questions });
 });
 
 // Submit quiz results - Enhanced to be sensitive to careers in database
-router.post('/career-assessment/submit', authenticate, (req, res) => {
+router.post('/career-assessment/submit', authenticate, requireRole('student'), (req, res) => {
   try {
     const { answers } = req.body; // Array of { questionId, answer }
 
@@ -239,7 +239,7 @@ function mapCategoryToCareerCategory(questionCategory) {
 }
 
 // Get student quiz results
-router.get('/results', authenticate, (req, res) => {
+router.get('/results', authenticate, requireRole('student'), (req, res) => {
   const results = db.prepare(`
     SELECT * FROM student_quiz_results 
     WHERE student_id = ? 
@@ -268,7 +268,7 @@ router.get('/results', authenticate, (req, res) => {
 });
 
 // Check if student has completed quiz
-router.get('/check-completion', authenticate, (req, res) => {
+router.get('/check-completion', authenticate, requireRole('student'), (req, res) => {
   const result = db.prepare(`
     SELECT id FROM student_quiz_results 
     WHERE student_id = ? 

@@ -3,18 +3,33 @@
   "version": "1.0.0",
   "description": "Career Counseling Platform for Liberian High School Students",
   "private": true,
+  "type": "module",
+  "engines": { "node": "24.x" },
   "scripts": {
+    "build:server": "node server/scripts/generate-postgres-routes.cjs",
+    "test:client-forms": "node client/scripts/check-login.mjs",
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
-    "build": "cd client && npm run build",
+    "build": "npm run build:server && npm run build --prefix client",
+    "predev:server": "npm run build:server",
     "install:all": "npm install && cd client && npm install --production=false && cd ../server && npm install"
   },
-  "keywords": ["career", "counseling", "liberia", "education"],
+  "keywords": [
+    "career",
+    "counseling",
+    "liberia",
+    "education"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@babel/generator": "^7.29.12",
+    "@babel/parser": "^7.29.12",
+    "@babel/traverse": "^7.29.12",
+    "@babel/types": "^7.29.11",
+    "concurrently": "^8.2.2",
+    "neonctl": "^8.17.1",
+    "vercel": "^65.10.0"
   }
 }
-

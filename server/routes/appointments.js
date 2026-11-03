@@ -5,7 +5,7 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 const router = express.Router();
 
 // Book appointment (Student)
-router.post('/', authenticate, (req, res) => {
+router.post('/', authenticate, requireRole('student'), (req, res) => {
   try {
     const { counselorId, appointmentDate, appointmentTime, notes } = req.body;
 
@@ -14,8 +14,8 @@ router.post('/', authenticate, (req, res) => {
     }
 
     // Check if counselor exists and is approved
-    const counselor = db.prepare('SELECT id, is_approved FROM users WHERE id = ? AND role = ?').get(counselorId, 'counselor');
-    if (!counselor || !counselor.is_approved) {
+    const counselor = db.prepare('SELECT id, is_approved, is_disabled FROM users WHERE id = ? AND role = ?').get(counselorId, 'counselor');
+    if (!counselor || !counselor.is_approved || counselor.is_disabled) {
       return res.status(404).json({ error: 'Counselor not found or not approved' });
     }
 
@@ -32,7 +32,7 @@ router.post('/', authenticate, (req, res) => {
 });
 
 // Get student's appointments
-router.get('/student', authenticate, (req, res) => {
+router.get('/student', authenticate, requireRole('student'), (req, res) => {
   const appointments = db.prepare(`
     SELECT a.*, 
            u.first_name || ' ' || u.last_name as counselor_name,
@@ -48,7 +48,7 @@ router.get('/student', authenticate, (req, res) => {
 });
 
 // Get counselor's appointments
-router.get('/counselor', authenticate, (req, res) => {
+router.get('/counselor', authenticate, requireRole('counselor'), (req, res) => {
   const appointments = db.prepare(`
     SELECT a.*, 
            u.first_name || ' ' || u.last_name as student_name,
@@ -64,7 +64,7 @@ router.get('/counselor', authenticate, (req, res) => {
 });
 
 // Update appointment status (Counselor)
-router.patch('/:id/status', authenticate, (req, res) => {
+router.patch('/:id/status', authenticate, requireRole('counselor'), (req, res) => {
   try {
     const { status, rejectionReason } = req.body;
 
@@ -110,4 +110,3 @@ router.get('/all', authenticate, requireRole('admin'), (req, res) => {
 });
 
 export default router;
-

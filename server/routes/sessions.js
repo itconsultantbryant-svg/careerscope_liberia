@@ -1,21 +1,20 @@
 import express from 'express';
 import { db } from '../db/init.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Create live session
-router.post('/', authenticate, (req, res) => {
+router.post('/', authenticate, requireRole('counselor'), (req, res) => {
   try {
     const { appointmentId, studentId, counselorId, sessionTitle, sessionType, startTime } = req.body;
 
     // Verify permissions
-    if (req.user.role === 'student' && req.user.id !== parseInt(studentId)) {
+    if (req.user.id !== parseInt(counselorId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    if (req.user.role === 'counselor' && req.user.id !== parseInt(counselorId)) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+    const student = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND is_disabled = 0").get(studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
 
     const result = db.prepare(`
       INSERT INTO live_sessions 
@@ -49,7 +48,7 @@ router.post('/', authenticate, (req, res) => {
 });
 
 // Get student sessions
-router.get('/student', authenticate, (req, res) => {
+router.get('/student', authenticate, requireRole('student'), (req, res) => {
   const sessions = db.prepare(`
     SELECT ls.*,
            u.first_name || ' ' || u.last_name as counselor_name,
@@ -107,6 +106,9 @@ router.get('/all', authenticate, (req, res) => {
 router.patch('/:id/status', authenticate, (req, res) => {
   try {
     const { status, sessionNotes, endTime } = req.body;
+    if (!['scheduled', 'active', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid session status' });
+    }
 
     const session = db.prepare('SELECT * FROM live_sessions WHERE id = ?').get(req.params.id);
     if (!session) {
@@ -135,4 +137,3 @@ router.patch('/:id/status', authenticate, (req, res) => {
 });
 
 export default router;
-

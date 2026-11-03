@@ -167,7 +167,7 @@ export default function Home() {
 
       {/* Hero Section with Background Image */}
       <section 
-        className="relative min-h-[90vh] flex items-center justify-center text-white py-20 overflow-hidden"
+        className="hero-section relative min-h-[90vh] flex items-center justify-center text-white py-20 overflow-hidden"
         style={{
           backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.4)), url(${headerBackground})`,
           backgroundSize: 'cover',
