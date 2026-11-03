@@ -14,7 +14,7 @@ let previewAccounts = [];
 try { previewAccounts = JSON.parse(await readFile(new URL('../.env.accounts.local', import.meta.url), 'utf8')).preview || []; } catch { /* Fresh test branch uses original test passwords. */ }
 let checks = 0;
 async function call(path, role, method = 'GET', body, expected = 200) {
-  const response = await fetch(`${base}${path}`, { method, headers: { ...(cookies[role] ? { Cookie: cookies[role] } : {}), ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }) }, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
+  const response = await fetch(`${base}${path}`, { method, signal: AbortSignal.timeout(45000), headers: { ...(cookies[role] ? { Cookie: cookies[role] } : {}), ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }) }, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
   const content = response.headers.get('content-type') || '';
   const data = content.includes('application/json') ? await response.json() : Buffer.from(await response.arrayBuffer());
   assert.equal(response.status, expected, `${method} ${path}: ${JSON.stringify(data)}`);

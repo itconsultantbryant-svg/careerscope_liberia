@@ -5,7 +5,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 // Preserve the existing API's numeric counters and integer flags.
 pg.types.setTypeParser(20, (value) => Number(value));
 const context = new AsyncLocalStorage();
-export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL?.replace(/sslmode=require\b/, 'sslmode=verify-full'), max: 3, idleTimeoutMillis: 10000, connectionTimeoutMillis: 15000, allowExitOnIdle: true });
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL?.replace(/sslmode=require\b/, 'sslmode=verify-full'), max: 3, idleTimeoutMillis: 10000, connectionTimeoutMillis: 15000, statement_timeout: 15000, query_timeout: 20000, allowExitOnIdle: true });
 
 export function postgresSql(source, returning = false) {
   let sql = source.trim().replace(/;$/, '');
