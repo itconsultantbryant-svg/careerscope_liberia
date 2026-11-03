@@ -97,7 +97,7 @@ if (process.env.NODE_ENV === 'production') {
     join(process.cwd(), 'client/dist'),     // From project root
     join(process.cwd(), '../client/dist'),   // Alternative
   ];
-  
+
   let clientPath = null;
   for (const path of possiblePaths) {
     if (existsSync(path)) {
@@ -106,15 +106,15 @@ if (process.env.NODE_ENV === 'production') {
       break;
     }
   }
-  
+
   console.log(`🔍 Looking for client build. Checked paths:`, possiblePaths);
   console.log(`📁 Current __dirname: ${__dirname}`);
   console.log(`📁 Process CWD: ${process.cwd()}`);
-  
+
   // Only serve static files if dist directory exists
   if (clientPath && existsSync(clientPath)) {
     app.use(express.static(clientPath));
-    
+
     // Handle React routing, return all requests to React app (except API routes)
     app.get('*', (req, res, next) => {
       // Don't serve React app for API routes
@@ -136,7 +136,7 @@ if (process.env.NODE_ENV === 'production') {
       if (req.path.startsWith('/api')) {
         return next();
       }
-      res.status(503).json({ 
+      res.status(503).json({
         error: 'Client build not available',
         message: 'The frontend build was not found. Please check the build process.',
         apiHealth: '/api/health'
@@ -148,7 +148,7 @@ if (process.env.NODE_ENV === 'production') {
 // Socket.IO authentication middleware
 io.use((socket, next) => {
   const token = socket.handshake.auth.token || socket.handshake.headers.cookie?.split('token=')[1]?.split(';')[0];
-  
+
   if (!token) {
     return next(new Error('Authentication error'));
   }
