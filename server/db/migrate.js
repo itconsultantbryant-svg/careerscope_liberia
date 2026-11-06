@@ -2,6 +2,7 @@ import { pool } from './postgres.js';
 import { readFile } from 'node:fs/promises';
 import { careers } from './careers-data.js';
 import { questions } from '../generated/assessment-seed.js';
+import { seedAiCounselors } from './ai-seed.js';
 
 export async function migrate() {
   const client = await pool.connect();
@@ -38,12 +39,16 @@ export async function migrate() {
       CREATE INDEX IF NOT EXISTS realtime_events_created_at ON realtime_events(created_at);
       INSERT INTO schema_versions(version) VALUES (2) ON CONFLICT DO NOTHING;
     `);
+    if (!(await client.query('SELECT version FROM schema_versions WHERE version = 3')).rowCount) {
+      await client.query(await readFile(new URL('./features.sql', import.meta.url), 'utf8'));
+    }
     if (!(await client.query('SELECT id FROM careers LIMIT 1')).rowCount) {
       for (const career of careers) await client.query('INSERT INTO careers(title, description, job_outlook, required_education, salary_range, skills_required, universities, category) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [career.title, career.description, career.job_outlook || null, career.required_education || null, career.salary_range || null, career.skills_required || null, career.universities || null, career.category || null]);
     }
     if (!(await client.query('SELECT id FROM quiz_questions LIMIT 1')).rowCount) {
       for (const question of questions) await client.query('INSERT INTO quiz_questions(question, options, career_category, points) VALUES ($1,$2,$3,$4)', [question.question, question.options, question.career_category, question.points]);
     }
+    await seedAiCounselors(client);
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }

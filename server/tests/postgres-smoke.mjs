@@ -44,7 +44,7 @@ try {
   await call('/api/learning/materials', 'counselor', 'POST', { studentId: 2, materialType: 'quiz', title: 'Postgres quiz', questions: [{ question: 'Test?', options: ['A', 'B'], correctAnswer: 'A', points: 1 }] }, 201);
   await call('/api/learning/materials/student', 'student');
   const appointment = (await call('/api/appointments', 'student', 'POST', { counselorId: 3, appointmentDate: '2027-01-15', appointmentTime: '10:00' }, 201)).data;
-  await call(`/api/appointments/${appointment.appointmentId}/status`, 'counselor', 'PATCH', { status: 'accepted' });
+  await call(`/api/appointments/${appointment.appointmentId}/status`, 'counselor', 'PATCH', { status: 'accepted', revision: 1 });
   await call('/api/sessions', 'counselor', 'POST', { appointmentId: appointment.appointmentId, studentId: 2, counselorId: 3, sessionTitle: 'Postgres session', sessionType: 'counseling' }, 201);
   await call('/api/admin/counselors', 'admin', 'POST', { firstName: 'Migration', lastName: 'Counselor', phone: `+1666${Date.now().toString().slice(-8)}`, password: `Counselor#${suffix}`, careerIds: [1], isApproved: true }, 201);
   await call('/api/admin/users', 'admin');
@@ -61,9 +61,14 @@ try {
   await call('/api/realtime/publish', 'student', 'POST', { event: 'send_message', data: { id: savedMessage.messageData.id } });
   const received = await call(`/api/realtime/events?after=${cursor}`, 'counselor');
   assert.ok(received.data.events.some((event) => event.event === 'new_message' && event.payload.id === savedMessage.messageData.id)); checks++;
+  assert.ok(received.data.events.some((event) => event.event === 'notification_created' && event.payload.target_path === '/chat?userId=2')); checks++;
   await call('/api/realtime/publish', 'admin', 'POST', { event: 'send_message', data: { id: savedMessage.messageData.id } }, 403);
   await call('/api/messages/3', 'student');
   await call('/api/messages/conversations', 'student');
+  const freshPhone = (await pool.query('SELECT phone FROM users WHERE id=$1', [registered.userId])).rows[0].phone;
+  const freshSession = await call('/api/auth/login', 'fresh', 'POST', { phone: freshPhone, password: `Migration#${suffix}` });
+  cookies.originalStudent = cookies.student;
+  cookies.student = freshSession.response.headers.get('set-cookie').split(';')[0];
   const { data: payment } = await call('/api/billing', 'student', 'POST', { method: 'orange_money', providerReference: `TEST-${randomUUID()}` }, 201);
   const reviews = await Promise.all([
     fetch(`${base}/api/billing/${payment.id}/review`, { method: 'PATCH', headers: { Cookie: cookies.admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'approved', note: 'Smoke test approval' }) }),
@@ -76,7 +81,8 @@ try {
   const pdf = await call(`/api/billing/receipts/${receipt.receipt_id}/download`, 'student');
   assert.equal(pdf.data.subarray(0, 4).toString(), '%PDF'); checks++;
   await call(`/api/billing/verify/${receipt.receipt_reference}`, 'admin');
-  const invoice = (await call('/api/billing/invoices', 'admin', 'POST', { schoolName: 'Migration Test School', currency: 'USD', allocations: [{ studentId: 2, amountMinor: 2000 }] }, 201)).data;
+  const invoiceStudent = (await call('/api/auth/register/student', undefined, 'POST', { firstName: 'Invoice', lastName: 'Student', phone: `+1777${Date.now().toString().slice(-8)}`, country: 'Liberia', county: 'Montserrado', schoolName: 'Test Academy', gradeLevel: 10, password: `Migration#${suffix}` }, 201)).data;
+  const invoice = (await call('/api/billing/invoices', 'admin', 'POST', { schoolName: 'Migration Test School', currency: 'USD', allocations: [{ studentId: invoiceStudent.userId, amountMinor: 2000 }] }, 201)).data;
   const invoicePayment = (await call('/api/billing', 'admin', 'POST', { invoiceId: invoice.id, method: 'bank_transfer', providerReference: `INV-${randomUUID()}` }, 201)).data;
   await call(`/api/billing/${invoicePayment.id}/review`, 'admin', 'PATCH', { status: 'approved', note: 'Verified invoice payment' });
   const invoicePdf = await call(`/api/billing/invoices/${invoice.id}/download`, 'admin');

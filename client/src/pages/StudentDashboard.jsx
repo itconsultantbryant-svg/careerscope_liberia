@@ -5,7 +5,6 @@ import api from '../utils/api';
 import { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 import Sidebar from '../components/Sidebar';
 import CareerQuizModal from '../components/CareerQuizModal';
 import NotificationBell from '../components/NotificationBell';
@@ -1277,7 +1276,6 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      <Footer />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import api from '../utils/api';
 import { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 import Sidebar from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
 import CalendarView from '../components/CalendarView';
@@ -144,7 +143,7 @@ export default function CounselorDashboard() {
 
   const updateAppointmentStatus = async (appointmentId, status, rejectionReason = null) => {
     try {
-      await api.patch(`/appointments/${appointmentId}/status`, { status, rejectionReason });
+      await api.patch(`/appointments/${appointmentId}/status`, { status, rejectionReason, revision: appointments.find(a => a.id === appointmentId)?.revision });
       toast.success(`Appointment ${status}`);
       fetchData();
     } catch (error) {
@@ -187,7 +186,7 @@ export default function CounselorDashboard() {
 
   const acceptSchedule = async (scheduleId) => {
     try {
-      await api.patch(`/schedules/${scheduleId}/accept`);
+      await api.patch(`/schedules/${scheduleId}/accept`, { revision: schedules.find(s => s.id === scheduleId)?.revision });
       toast.success('Schedule accepted!');
       fetchData();
     } catch (error) {
@@ -197,7 +196,7 @@ export default function CounselorDashboard() {
 
   const rejectSchedule = async (scheduleId, rejectionReason) => {
     try {
-      await api.patch(`/schedules/${scheduleId}/reject`, { rejectionReason });
+      await api.patch(`/schedules/${scheduleId}/reject`, { rejectionReason, revision: schedules.find(s => s.id === scheduleId)?.revision });
       toast.success('Schedule rejected');
       fetchData();
     } catch (error) {
@@ -1167,7 +1166,6 @@ export default function CounselorDashboard() {
         </div>
       )}
 
-      <Footer />
     </div>
   );
 }

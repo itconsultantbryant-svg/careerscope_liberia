@@ -13,7 +13,8 @@ const { loginSchema, studentSchema } = new Function('z', `${schemas.map((node) =
 for (const role of ['student', 'counselor', 'admin']) {
   assert.equal(loginSchema.safeParse({ role, phone: '0771234567', email: '', password: 'ValidPassword12' }).success, true);
   assert.equal(loginSchema.safeParse({ role, phone: '', email: 'account@example.com', password: 'ValidPassword12' }).success, true);
+  assert.equal(loginSchema.safeParse({ role, phone: '', email: '', username: 'assigned_user', password: 'ValidPassword12' }).success, true);
   assert.equal(loginSchema.safeParse({ role, phone: '', email: '', password: 'ValidPassword12' }).success, false);
 }
 assert.equal(studentSchema.safeParse({ firstName: 'Test', lastName: 'Student', phone: '+15551234567', email: '', country: 'United States', county: 'Virginia', schoolName: 'Test School', gradeLevel: 10, password: 'ValidPassword12' }).success, true);
-console.log('Login form schema checks passed: phone-only, email-only, required identifier, and international registration.');
+console.log('Login form schema checks passed: phone-only, email-only, username-only, required identifier, and international registration.');

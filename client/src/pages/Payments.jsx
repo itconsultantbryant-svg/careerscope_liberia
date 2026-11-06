@@ -31,6 +31,7 @@ export default function Payments() {
   const [amount, setAmount] = useState('20.00');
   const [currency, setCurrency] = useState('USD');
   const [schoolName, setSchoolName] = useState('');
+  const [payerDetails, setPayerDetails] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [invoiceId, setInvoiceId] = useState('');
   const [notes, setNotes] = useState({});
@@ -58,7 +59,7 @@ export default function Payments() {
     setBusy(true);
     try {
       const allocations = admin && !invoiceId ? selected.map((studentId) => ({ studentId, amountMinor: minorUnits(amount) })) : undefined;
-      await api.post(invoice ? '/billing/invoices' : '/billing', { allocations, currency, schoolName, contactEmail, invoiceId: invoiceId ? Number(invoiceId) : undefined, method, providerReference: reference });
+      await api.post(invoice ? '/billing/invoices' : '/billing', { allocations, currency, schoolName, payerDetails, contactEmail, invoiceId: invoiceId ? Number(invoiceId) : undefined, method, providerReference: reference });
       toast.success(invoice ? 'Invoice generated. Download and send it to the school.' : 'Payment submitted for manual review.');
       setReference('');
       await load();
@@ -89,6 +90,8 @@ export default function Payments() {
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">{admin ? 'Payments, invoices & receipts' : 'My subscription & receipts'}</h1>
         <p className="text-gray-600 mb-6">{admin ? 'Review transactions, record school payments and issue verifiable student receipts.' : 'Submit your payment reference, track approval and download receipts paid by you or on your behalf.'}</p>
         {!admin && plan?.subscriptionExpiresAt && <p className="mb-6 text-sm">Subscription term ends: {new Date(plan.subscriptionExpiresAt).toLocaleDateString()}</p>}
+        {!admin && plan?.sponsor?.name && <p className="card mb-4">Paid by: <strong>{plan.sponsor.name}</strong>{plan.sponsor.payer_details && ` · ${plan.sponsor.payer_details}`}. {plan.covered ? 'Your academic-year subscription is covered; no further payment is required.' : ''}</p>}
+        {!admin && plan?.isAlumni && <p className="card mb-4">Alumni · Your counseling materials and counselor assignment remain available.</p>}
         {error && <div role="alert" className="p-4 mb-4 bg-red-50 text-red-800 rounded-lg">{error} <button onClick={load} className="underline">Retry</button></div>}
         {loading ? <p role="status">Loading billing…</p> : <>
           {admin && <section className="card mb-6" aria-label="Payment review chart">
@@ -101,9 +104,10 @@ export default function Payments() {
           <section className="card mb-6">
             <h2 className="text-xl font-semibold mb-4">{admin ? 'Record individual / bulk payment or create invoice' : 'Submit subscription payment'}</h2>
             <p className="text-sm text-gray-600 mb-4">{plan?.instructions}</p>
-            {!admin && !plan?.configured ? <p role="status">Subscription pricing has not been configured. Please contact an administrator.</p> : <form onSubmit={submit} className="space-y-4">
+            {!admin && !plan?.canPay ? <p role="status">{plan?.covered ? 'You are already covered for this academic year. Payments reopen after your coverage ends.' : plan?.pending ? 'A payment is awaiting review. Please do not pay again.' : plan?.invoicedBy ? `${plan.invoicedBy} has been invoiced on your behalf. Please do not pay separately.` : 'Payment availability is loading.'}</p> : !admin && !plan?.configured ? <p role="status">Subscription pricing has not been configured. Please contact an administrator.</p> : <form onSubmit={submit} className="space-y-4">
               {!admin && <p className="font-semibold">Subscription: {money(plan?.amountMinor, plan?.currency)} · {plan?.term}</p>}
-              {admin && <>
+               {admin && <>
+                 <label className="block">Paying institution details (optional)<input className="input-field" maxLength={1000} value={payerDetails} onChange={event => setPayerDetails(event.target.value)} placeholder="Institution address / contact / sponsorship details" /></label>
                 <label className="block">Existing school invoice (optional)
                   <select className="input-field mt-1" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)}><option value="">No invoice — select students below</option>{invoices.filter((inv) => inv.status === 'issued').map((inv) => <option key={inv.id} value={inv.id}>{inv.school_name} — {money(inv.total_minor, inv.currency)}</option>)}</select>
                 </label>
@@ -114,7 +118,7 @@ export default function Payments() {
                     <p className="text-sm text-gray-600 mt-2">{selected.length} students selected</p>
                   </fieldset>
                   <div className="grid sm:grid-cols-2 gap-4"><label>Amount per student<input className="input-field" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Currency<select className="input-field" value={currency} onChange={(event) => setCurrency(event.target.value)}><option>USD</option><option>LRD</option></select></label></div>
-                  <div className="grid sm:grid-cols-2 gap-4"><label>School name (for invoice)<input className="input-field" maxLength={200} value={schoolName} onChange={(event) => setSchoolName(event.target.value)} /></label><label>School contact email<input className="input-field" type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} /></label></div>
+                  <div className="grid sm:grid-cols-2 gap-4"><label>Paying institution / school name<input className="input-field" maxLength={200} value={schoolName} onChange={(event) => setSchoolName(event.target.value)} /></label><label>School contact email<input className="input-field" type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} /></label></div>
                   <button type="button" className="btn-secondary" disabled={busy || !selected.length || !schoolName} onClick={(event) => submit(event, true)}>Generate school invoice</button>
                 </>}
               </>}
@@ -126,7 +130,7 @@ export default function Payments() {
           <section className="space-y-4 mb-6"><h2 className="text-xl font-semibold">Transaction records</h2>
             {!payments.length && <p className="card">No payments recorded yet.</p>}
             {payments.map((payment) => <article className="card break-words" key={`${payment.id}-${payment.student_id}`}>
-              <div className="flex flex-col sm:flex-row justify-between gap-3"><div><h3 className="font-semibold">{payment.student_name} · {money(payment.amount_minor, payment.currency)}</h3><p className="text-sm text-gray-600">{payment.reference}</p><p className="text-sm">{payment.method} · Reference: {payment.provider_reference}</p></div><strong className="capitalize">{payment.status}</strong></div>
+               <div className="flex flex-col sm:flex-row justify-between gap-3"><div><h3 className="font-semibold">{payment.student_name} · {money(payment.amount_minor, payment.currency)}</h3><p className="text-sm text-gray-600">Transaction #: {payment.reference}</p><p className="text-sm">{payment.method} · Provider reference: {payment.provider_reference}</p>{payment.payer_institution && <p className="text-sm">Paid by: {payment.payer_institution}</p>}{payment.receipt_reference && <p className="text-sm">Receipt #: {payment.receipt_reference}</p>}</div><strong className="capitalize">{payment.status}</strong></div>
               {payment.review_note && <p className="mt-3 text-sm">Review note: {payment.review_note}</p>}
               {payment.receipt_id && <button className="btn-secondary mt-3" onClick={() => download(`/billing/receipts/${payment.receipt_id}/download`, payment.receipt_reference)}>Download receipt</button>}
               {admin && payment.status === 'pending' && <div className="mt-4 space-y-3"><label className="block">Review note (required)<input className="input-field" maxLength={1000} value={notes[payment.id] || ''} onChange={(event) => setNotes({ ...notes, [payment.id]: event.target.value })} /></label><div className="flex flex-wrap gap-3"><button disabled={busy} className="btn-primary" onClick={() => review(payment.id, 'approved')}>Approve payment</button><button disabled={busy} className="btn-secondary" onClick={() => review(payment.id, 'rejected')}>Reject payment</button></div><p className="text-sm text-gray-600">For bulk entries, review applies to the entire transaction and all its students.</p></div>}
@@ -137,14 +141,15 @@ export default function Payments() {
             <p className="text-sm mb-4">Download a PDF, or send it using the configured invoice email provider.</p>
             <div className="space-y-4">{invoices.map((invoice) => <div key={invoice.id} className="border rounded-lg p-3 break-words">
               <p>{invoice.school_name} · {money(invoice.total_minor, invoice.currency)} · {invoice.status}</p>
-              <small>{invoice.reference}</small>
+               <small>Invoice #: {invoice.reference}</small>
               <div className="flex flex-wrap gap-3 mt-3">
-                <button className="btn-secondary" onClick={() => download(`/billing/invoices/${invoice.id}/download`, invoice.reference)}>Download invoice</button>
+                 <button className="btn-secondary" onClick={() => download(`/billing/invoices/${invoice.id}/download`, invoice.reference)}>Download invoice</button>
+                 {invoice.status === 'issued' && <button className="btn-secondary" disabled={busy} onClick={async () => { try { await api.patch(`/billing/invoices/${invoice.id}/cancel`); await load(); toast.success('Invoice cancelled'); } catch (err) { toast.error(err.response?.data?.error || 'Unable to cancel invoice'); } }}>Cancel invoice</button>}
                 {invoice.contact_email && <button className="btn-secondary" disabled={busy} onClick={async () => { setBusy(true); try { const response = await api.post(`/billing/invoices/${invoice.id}/send`); toast.success(response.data.message); } catch (err) { toast.error(err.response?.data?.error || 'Unable to send invoice'); } finally { setBusy(false); } }}>Email to school</button>}
               </div>
             </div>)}</div>
           </section>}
-          <section className="card"><h2 className="text-xl font-semibold mb-4">Verify a receipt or invoice</h2><form className="flex flex-col sm:flex-row gap-3" onSubmit={async (event) => { event.preventDefault(); setVerified(null); try { const response = await api.get(`/billing/verify/${encodeURIComponent(verify.trim())}`); setVerified(response.data.document); } catch { toast.error('Reference not found'); } }}><input aria-label="Receipt or invoice reference" className="input-field" value={verify} onChange={(event) => setVerify(event.target.value)} required /><button className="btn-primary">Verify</button></form>{verified && <p className="mt-3 break-words" role="status">Valid reference: {verified.reference} · {verified.status}</p>}</section>
+          <section className="card"><h2 className="text-xl font-semibold mb-4">Verify a receipt, transaction or invoice number</h2><form className="flex flex-col sm:flex-row gap-3" onSubmit={async (event) => { event.preventDefault(); setVerified(null); try { const response = await api.get(`/billing/verify/${encodeURIComponent(verify.trim())}`); setVerified(response.data.document); } catch { toast.error('Reference not found'); } }}><input aria-label="Receipt, transaction or invoice number" className="input-field" value={verify} onChange={(event) => setVerify(event.target.value)} required /><button className="btn-primary">Verify</button></form>{verified && <p className="mt-3 break-words" role="status">Verified {verified.kind} #: {verified.reference} · {verified.status}</p>}</section>
         </>}
       </main>
     </div>

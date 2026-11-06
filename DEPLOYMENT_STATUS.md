@@ -21,6 +21,8 @@
   are ignored in Git and recreated during every build. The generator rejects
   unawaited database operations.
 - Legacy SQLite route definitions remain for migration regression tests.
+  New planning, classroom, archive, management, AI-directory and billing mutation
+  APIs live in `server/features/` and mount before generated compatibility routes.
   `server/index.js` uses PostgreSQL whenever DATABASE_URL exists. Production
   refuses to fall back to SQLite. Native SQLite/bcrypt/Socket.IO packages are
   development-only and not installed in the Vercel production API.
@@ -34,13 +36,17 @@
   not require Ably credentials. Event rows are retained for approximately a day.
 - WebRTC signaling uses authenticated call-participant events. Actual audio/video
   connectivity depends on device permissions and network/STUN/TURN availability;
-  no claim is made that cross-network media calls were browser-tested.
+  local two-party Chrome media was verified with fake devices (19 browser checks).
+  Restrictive/cross-network connectivity still requires operator TURN setup and
+  deployment-specific verification.
 
 ## Subscription and billing
 
 - Price: **20 USD per academic year** (2000 integer cents).
-- Operational term: **12 months from approval**; renewal extends any remaining
-  entitlement. This is not tied to a school-specific calendar start/end date.
+- Operational term: **12 months from approval**. Student-row locks block new
+  payments during active coverage, pending review, or an issued institution
+  invoice; individual and bulk/invoice paths share these rules. Renewal opens
+  after coverage expires. This is not tied to a school-specific calendar date.
 - Company: **CareerScope, Sinkor, Monrovia, Liberia**.
 - Methods: Mobile Money, Orange Money, bank transfer, VISA external checkout;
   administrators can additionally record cash.
@@ -61,6 +67,33 @@
   A live VISA/card checkout requires a merchant processor and signed-webhook
   integration; selecting VISA in the current manual ledger does not charge it.
 - Legacy mocked payments are read-only; no unverified mock can grant access.
+
+## Schema v3 and feature operations
+
+- `server/db/features.sql` adds revisioned planning, assignments, classroom ACLs,
+  private archives, payer snapshots, AI profiles and admin audit/session fields.
+  Apply explicitly to preview before testing and to production before deploying
+  this version; migration/AI seeding are idempotent.
+- Plans require counterparty acceptance, including student acceptance of counselor
+  proposals. Revision mismatches return 409 instead of accepting stale changes.
+  Revisions retire unstarted classrooms; active classes must end before editing.
+- Counselors start accepted classes only within their time window. Up to six
+  explicitly invited members can join/rejoin a live room; sharing a UUID link
+  does not grant access. Students invited to groups need matching confirmed time.
+- Media uses a bounded WebRTC mesh, not an SFU or media recording service. Set
+  `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` for restrictive networks. Browser
+  captions are opt-in microphone-only speech recognition, not full meeting
+  transcription. Audio-output support varies by browser.
+- Notes autosave to owner-only archives; even admins cannot read another user’s
+  private archive. Uploads are bounded to 3 MB per document.
+- Account deletion is soft deletion. Password/profile credential changes revoke
+  prior JWT sessions through `token_version`; financial/audit history is retained.
+- Exactly 50 labeled AI profiles are seeded across the available careers. They
+  cannot sign in as human counselors and make no paid model calls. Configure-later
+  mode intentionally rejects live activation/messages until provider integration
+  and explicit approval are implemented.
+- Alumni status begins after cycle completion **and** subscription expiry;
+  materials, private archives and counselor assignments remain available.
 
 ## Credentials and environment
 
@@ -143,11 +176,17 @@ GitHub is connected to the Vercel project for future deployments.
 ## Verification
 
 - `npm run build`: PostgreSQL generation and frontend production build.
-- `npm test --prefix server`: nine isolated regression/SQL translation tests.
-- `npm run test:postgres --prefix server`: 82 integration checks against the
+- `npm test --prefix server`: 11 isolated regression/scheduling/SQL translation tests.
+- `npm run test:postgres --prefix server`: 85 integration checks against the
   isolated Neon preview branch, covering all role dashboards, registration,
   learning/grading, appointments, sessions, billing concurrency, PDF generation,
   durable uploads and authenticated event delivery.
+- `npm run test:features --prefix server`: 96 preview integration checks covering
+  revisions/acceptance, classroom ACLs/time/limits/signaling, private documents,
+  concurrent payment coverage, institution sponsorship, alumni and session revocation.
+- `server/tests/browser-smoke.mjs`: optional real Chrome two-party WebRTC/mobile
+  workflow test using fake devices; 19 checks passed. See README for the Playwright
+  module setting.
 - `node server/scripts/verify-deployment.js <url> preview|production`: live
   deployment authentication/API/PDF checks without printing secrets.
 - `npm run test:client-forms`: actual login/registration schema regression checks.

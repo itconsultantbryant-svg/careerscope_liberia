@@ -8,6 +8,7 @@
     "migrate:neon": "node scripts/migrate-neon.js",
     "migrate:postgres": "node db/migrate.js --apply",
     "test:postgres": "node --env-file=.env.neon-test.local tests/postgres-smoke.mjs",
+    "test:features": "node --env-file=.env.neon-test.local tests/features-smoke.mjs",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

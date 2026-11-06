@@ -16,6 +16,11 @@ const CareerDetail = lazy(() => import('./pages/CareerDetail'));
 const Profile = lazy(() => import('./pages/Profile'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const Payments = lazy(() => import('./pages/Payments'));
+const ScheduleCenter = lazy(() => import('./pages/ScheduleCenter'));
+const Classroom = lazy(() => import('./pages/Classroom'));
+const Archive = lazy(() => import('./pages/Archive'));
+const AICounselors = lazy(() => import('./pages/AICounselors'));
+const Management = lazy(() => import('./pages/Management'));
 
 function RouteLoader() {
   return (
@@ -72,7 +77,7 @@ function AppRoutes() {
         path="/student/appointments"
         element={
           <ProtectedRoute allowedRoles={['student']}>
-            <StudentDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -96,7 +101,7 @@ function AppRoutes() {
         path="/student/sessions"
         element={
           <ProtectedRoute allowedRoles={['student']}>
-            <StudentDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -104,7 +109,7 @@ function AppRoutes() {
         path="/student/calendar"
         element={
           <ProtectedRoute allowedRoles={['student']}>
-            <StudentDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -130,7 +135,7 @@ function AppRoutes() {
         path="/counselor/appointments"
         element={
           <ProtectedRoute allowedRoles={['counselor']}>
-            <CounselorDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -162,7 +167,7 @@ function AppRoutes() {
         path="/counselor/sessions"
         element={
           <ProtectedRoute allowedRoles={['counselor']}>
-            <CounselorDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -170,7 +175,7 @@ function AppRoutes() {
         path="/counselor/calendar"
         element={
           <ProtectedRoute allowedRoles={['counselor']}>
-            <CounselorDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -196,7 +201,7 @@ function AppRoutes() {
         path="/admin/users"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <Management />
           </ProtectedRoute>
         }
       />
@@ -204,7 +209,7 @@ function AppRoutes() {
         path="/admin/students"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <Management />
           </ProtectedRoute>
         }
       />
@@ -212,7 +217,7 @@ function AppRoutes() {
         path="/admin/counselors"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <Management />
           </ProtectedRoute>
         }
       />
@@ -220,7 +225,7 @@ function AppRoutes() {
         path="/admin/appointments"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -228,7 +233,7 @@ function AppRoutes() {
         path="/admin/schedules"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -236,7 +241,7 @@ function AppRoutes() {
         path="/admin/calendar"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -244,7 +249,7 @@ function AppRoutes() {
         path="/admin/sessions"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+            <ScheduleCenter />
           </ProtectedRoute>
         }
       />
@@ -320,6 +325,9 @@ function AppRoutes() {
       <Route path="*" element={<Navigate to="/" replace />} />
       <Route path="/student/payments" element={<ProtectedRoute allowedRoles={['student']}><Payments /></ProtectedRoute>} />
       <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['admin']}><Payments /></ProtectedRoute>} />
+      <Route path="/classroom/:id" element={<ProtectedRoute><Classroom /></ProtectedRoute>} />
+      {['student','counselor','admin'].map(role => <Route key={`${role}-archive`} path={`/${role}/archive`} element={<ProtectedRoute allowedRoles={[role]}><Archive /></ProtectedRoute>} />)}
+      {['student','admin','counselor'].map(role => <Route key={`${role}-ai`} path={`/${role}/ai-counselors`} element={<ProtectedRoute allowedRoles={[role]}><AICounselors /></ProtectedRoute>} />)}
     </Routes>
     </Suspense>
   );

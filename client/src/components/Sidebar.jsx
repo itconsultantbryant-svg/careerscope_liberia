@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useEffect } from 'react';
 import {
   LayoutDashboard,
   User,
@@ -21,6 +22,12 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = (event) => { if (event.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [isOpen, onClose]);
 
   const handleClose = () => {
     if (onClose) {
@@ -59,6 +66,8 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     { path: '/chat', icon: MessageSquare, label: 'Chat' },
     { path: '/student/careers', icon: ClipboardList, label: 'Career Explorer' },
     { path: '/student/profile', icon: User, label: 'My Profile' },
+    { path: '/student/archive', icon: FileText, label: 'My Documents & Notes' },
+    { path: '/student/ai-counselors', icon: Users, label: 'AI Counselors' },
   ];
 
   const counselorMenu = [
@@ -72,6 +81,7 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     { path: '/chat', icon: MessageSquare, label: 'Messages' },
     { path: '/counselor/reports', icon: BarChart3, label: 'Reports' },
     { path: '/counselor/profile', icon: User, label: 'My Profile' },
+    { path: '/counselor/archive', icon: FileText, label: 'My Documents & Notes' },
   ];
 
   const adminMenu = [
@@ -88,6 +98,8 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
     { path: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
     { path: '/admin/payments', icon: FileText, label: 'Payments & Invoices' },
     { path: '/admin/profile', icon: User, label: 'My Profile' },
+    { path: '/admin/archive', icon: FileText, label: 'My Documents & Notes' },
+    { path: '/admin/ai-counselors', icon: Users, label: 'AI Counselors' },
   ];
 
   const menu = role === 'student' ? studentMenu : role === 'counselor' ? counselorMenu : adminMenu;
@@ -103,7 +115,8 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
         />
       )}
       <div
-        className={`w-64 bg-white shadow-lg min-h-screen fixed left-0 top-0 pt-4 md:pt-16 flex flex-col z-50 transform transition-transform duration-200 ${
+        id="dashboard-sidebar"
+        className={`w-64 bg-white shadow-lg fixed left-0 top-16 bottom-0 flex flex-col z-50 transform transition-transform duration-200 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
@@ -118,13 +131,14 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      <nav aria-label={`${role} dashboard navigation`} className="flex-1 min-h-0 px-4 py-4 space-y-1 overflow-y-auto overscroll-contain">
         {menu.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.path}
               to={item.path}
+              aria-current={isActive(item.path) ? 'page' : undefined}
               className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                 isActive(item.path)
                   ? 'bg-primary-600 text-white'
@@ -139,7 +153,7 @@ export default function Sidebar({ role, isOpen = false, onClose }) {
         })}
       </nav>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t shrink-0 bg-white">
         <button
           type="button"
           onClick={handleLogout}

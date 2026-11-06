@@ -122,21 +122,23 @@ router.post('/register/counselor', (req, res) => {
 // Login
 router.post('/login', loginLimiter, async (req, res) => {
   try {
-    const { phone, email, password, role } = req.body;
+    const { phone, email, username, password, role } = req.body;
 
-    if (!password || (!phone && !email)) {
+    if (!password || (!phone && !email && !username)) {
       return res.status(400).json({ error: 'Phone/Email and password required' });
     }
 
     // Find user by phone or email
     let user;
-    if (phone) {
+    if (username && db.dialect === 'postgres') {
+      user = db.prepare('SELECT * FROM users WHERE lower(username) = lower(?)').get(username);
+    } else if (phone) {
       user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
     } else {
       user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     }
 
-    if (!user) {
+    if (!user || user.deleted_at || user.counselor_type === 'ai') {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -167,7 +169,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { id: user.id, role: user.role, email: user.email, phone: user.phone },
+      { id: user.id, role: user.role, email: user.email, phone: user.phone, tokenVersion: user.token_version || 0 },
       process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );

@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 import Sidebar from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
 import CalendarView from '../components/CalendarView';
@@ -1984,7 +1983,6 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <Footer />
     </div>
   );
 }

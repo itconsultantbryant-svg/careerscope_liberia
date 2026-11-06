@@ -33,6 +33,15 @@ try {
   }
   for (const [path, role] of [['/api/admin/users','admin'], ['/api/admin/analytics','admin'], ['/api/billing','admin'], ['/api/schedules/all','admin'], ['/api/progress/student','student'], ['/api/learning/materials/student','student'], ['/api/appointments/student','student'], ['/api/sessions/counselor','counselor'], ['/api/users/students/list','counselor'], ['/api/realtime/events','student']]) await request(path, role);
   const plan = JSON.parse(await request('/api/billing/plan', 'student'));
+  for (const role of ['student', 'counselor', 'admin']) {
+    await request('/api/planner/overview', role);
+    await request('/api/archive', role);
+  }
+  await request('/api/management/users', 'admin');
+  await request('/api/management/users', 'student', 'GET', undefined, 403);
+  const ai = JSON.parse(await request('/api/ai-counselors', 'student'));
+  assert.equal(ai.counselors.length, 50);
+  assert.ok(ai.counselors.every((profile) => !profile.is_enabled));
   assert.equal(plan.amountMinor, 2000);
   assert.equal(plan.currency, 'USD');
   await request('/api/admin/users', 'student', 'GET', undefined, 403);

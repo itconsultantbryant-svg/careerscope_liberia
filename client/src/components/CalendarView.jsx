@@ -4,6 +4,7 @@ import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Calendar as CalendarIcon, Clock, Users, FileText, MessageSquare } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { scheduleOccurrence, wallTimeToDate } from '../../../shared/scheduling';
 
 const localizer = momentLocalizer(moment);
 
@@ -44,26 +45,17 @@ export default function CalendarView({
         // Generate occurrences for the next 3 months
         while (scheduleDate.isBefore(endDate)) {
           if (scheduleDate.isSameOrAfter(startDate)) {
-            const [startHour, startMinute] = schedule.start_time.split(':');
-            const [endHour, endMinute] = schedule.end_time.split(':');
-            
-            const eventStart = scheduleDate.clone()
-              .hour(parseInt(startHour))
-              .minute(parseInt(startMinute))
-              .second(0);
-            
-            const eventEnd = scheduleDate.clone()
-              .hour(parseInt(endHour))
-              .minute(parseInt(endMinute))
-              .second(0);
+            let occurrence;
+            try { occurrence = scheduleOccurrence(schedule, scheduleDate.format('YYYY-MM-DD')); }
+            catch { scheduleDate.add(1, 'week'); continue; }
 
             eventList.push({
               id: `schedule-${schedule.id}-${scheduleDate.format('YYYY-MM-DD')}`,
               title: role === 'student' 
                 ? `📅 Schedule: ${schedule.counselor_name || 'Counselor'}`
                 : `📅 Schedule: ${schedule.student_name || 'Student'}`,
-              start: eventStart.toDate(),
-              end: eventEnd.toDate(),
+              start: occurrence.start,
+              end: occurrence.end,
               resource: {
                 type: 'schedule',
                 data: schedule,
@@ -78,20 +70,11 @@ export default function CalendarView({
 
     // Add appointments
     appointments.forEach((apt) => {
-      if (apt.status === 'accepted' || apt.status === 'pending') {
-        const [year, month, day] = apt.appointment_date.split('-');
-        const [hour, minute] = apt.appointment_time.split(':');
-        
-        const start = moment()
-          .year(parseInt(year))
-          .month(parseInt(month) - 1)
-          .date(parseInt(day))
-          .hour(parseInt(hour))
-          .minute(parseInt(minute))
-          .second(0)
-          .toDate();
-        
-        const end = moment(start).add(1, 'hour').toDate();
+      if (apt.status === 'accepted') {
+        let start;
+        try { start = apt.starts_at ? new Date(apt.starts_at) : wallTimeToDate(apt.appointment_date, apt.appointment_time.slice(0, 5), apt.timezone); }
+        catch { return; }
+        const end = apt.ends_at ? new Date(apt.ends_at) : moment(start).add(1, 'hour').toDate();
 
         eventList.push({
           id: `appointment-${apt.id}`,

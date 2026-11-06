@@ -2,8 +2,8 @@ import jwt from 'jsonwebtoken';
 import { db } from '../db/postgres.js';
 
 export async function activeUser(decoded) {
-  const user = await db.prepare('SELECT id, role, is_disabled, is_approved FROM users WHERE id = ?').get(decoded.id);
-  return user && !user.is_disabled && (user.role !== 'counselor' || user.is_approved) ? { ...decoded, role: user.role } : null;
+  const user = await db.prepare('SELECT id, role, is_disabled, is_approved, deleted_at, token_version, counselor_type FROM users WHERE id = ?').get(decoded.id);
+  return user && !user.is_disabled && !user.deleted_at && user.counselor_type !== 'ai' && Number(decoded.tokenVersion || 0) === user.token_version && (user.role !== 'counselor' || user.is_approved) ? { ...decoded, role: user.role } : null;
 }
 
 export async function authenticate(req, res, next) {

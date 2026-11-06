@@ -13,7 +13,8 @@ export function renderBillingPdf({ title, reference, status, currency, rows, dat
     doc.fontSize(22).fillColor('#136c43').text(company.name, 125, 45);
     doc.fontSize(11).fillColor('#222222').text(company.address, 125, 77);
     doc.moveDown(3).text(title, 45, 130, { width: 500 }).moveDown();
-    doc.fontSize(9).text(`REF #: ${reference}`).text(`Status: ${status}`).text(`Issued: ${date}`).text(`Term: ${term || 'Academic year'}`).moveDown(2);
+    const numberLabel = title.startsWith('Invoice') ? 'Invoice #' : title.includes('Receipt') ? 'Receipt #' : 'Transaction #';
+    doc.fontSize(9).text(`${numberLabel}: ${reference}`).text(`Status: ${status}`).text(`Issued: ${date}`).text(`Term: ${term || 'Academic year'}`).moveDown(2);
     doc.fontSize(12).text(`Student allocation / amount (${currency})`).moveDown();
     let total = 0;
     for (const row of rows) {

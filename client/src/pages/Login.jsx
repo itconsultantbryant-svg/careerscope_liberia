@@ -12,10 +12,11 @@ import Footer from '../components/Footer';
 const loginSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
+  username: z.string().optional(),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   role: z.enum(['student', 'counselor', 'admin']),
-}).refine((data) => data.phone || data.email, {
-  message: 'Either phone or email is required',
+}).refine((data) => data.phone || data.email || data.username, {
+  message: 'Phone, email or username is required',
   path: ['phone'],
 });
 
@@ -150,6 +151,7 @@ export default function Login() {
                 </div>
 
                 <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
+                  <label className="block text-sm font-medium text-gray-700">Username (if assigned)<input {...loginForm.register('username')} autoComplete="username" className="input-field mt-2" placeholder="Your username" /></label>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Phone Number

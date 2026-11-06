@@ -27,6 +27,8 @@ export default function Navbar({ showSidebarToggle = false, sidebarOpen = false,
                 className="md:hidden text-gray-700"
                 onClick={onSidebarToggle}
                 aria-label="Toggle sidebar"
+                aria-expanded={sidebarOpen}
+                aria-controls="dashboard-sidebar"
               >
                 {sidebarOpen ? <X className="w-6 h-6" /> : <PanelLeft className="w-6 h-6" />}
               </button>

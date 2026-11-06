@@ -3,7 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import api, { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 import Sidebar from '../components/Sidebar';
 import { User, Camera, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -396,7 +395,6 @@ export default function Profile() {
         </div>
       </div>
 
-      <Footer />
     </div>
   );
 }

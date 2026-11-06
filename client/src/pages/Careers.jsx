@@ -1,15 +1,18 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Fragment, useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import DashboardLayout from '../components/DashboardLayout';
 import { BookOpen, Search, TrendingUp, MapPin, Briefcase, Star, Filter, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Careers() {
   const { user } = useAuth();
+  const dashboard = useLocation().pathname.startsWith('/student/');
+  const Shell = dashboard ? DashboardLayout : Fragment;
   const [careers, setCareers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -71,8 +74,9 @@ export default function Careers() {
   }
 
   return (
+    <Shell>
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <Navbar />
+      {!dashboard && <Navbar />}
       
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary-600 via-blue-600 to-primary-700 text-white py-16 md:py-24">
@@ -319,7 +323,8 @@ export default function Careers() {
         )}
       </div>
 
-      <Footer />
+      {!dashboard && <Footer />}
     </div>
+    </Shell>
   );
 }

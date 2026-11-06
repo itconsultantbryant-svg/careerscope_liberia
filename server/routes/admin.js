@@ -75,6 +75,9 @@ router.post('/counselors', authenticate, requireRole('admin'), async (req, res) 
     if (!firstName || !lastName || !phone || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    if (typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password) > 72) {
+      return res.status(400).json({ error: 'Counselor passwords require at least 12 characters and at most 72 bytes' });
+    }
 
     const existingPhone = db.prepare('SELECT id FROM users WHERE phone = ?').get(phone);
     if (existingPhone) {
@@ -135,6 +138,9 @@ router.post('/counselors', authenticate, requireRole('admin'), async (req, res) 
 
 // Approve/Reject counselor
 router.patch('/counselors/:id/approve', authenticate, requireRole('admin'), (req, res) => {
+  if (db.dialect === 'postgres' && db.prepare("SELECT id FROM users WHERE id = ? AND counselor_type = 'ai'").get(req.params.id)) {
+    return res.status(409).json({ error: 'AI profiles cannot be approved as human counselors. Live AI activation is disabled.' });
+  }
   const { isApproved } = req.body;
 
   db.prepare('UPDATE users SET is_approved = ? WHERE id = ? AND role = ?').run(
@@ -148,6 +154,7 @@ router.patch('/counselors/:id/approve', authenticate, requireRole('admin'), (req
 
 // Update user details (admin only)
 router.patch('/users/:id', authenticate, requireRole('admin'), async (req, res) => {
+  if (db.dialect === 'postgres') return res.status(409).json({ error: 'Use the People management page to update profiles and reset credentials securely.' });
   try {
     const targetUser = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.params.id);
     if (!targetUser) {
@@ -324,6 +331,7 @@ router.patch('/users/:id', authenticate, requireRole('admin'), async (req, res) 
 
 // Delete user (admin only)
 router.delete('/users/:id', authenticate, requireRole('admin'), (req, res) => {
+  if (db.dialect === 'postgres') return res.status(409).json({ error: 'Use the People management page to remove account access while retaining auditable records.' });
   const targetUser = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.params.id);
   if (!targetUser) {
     return res.status(404).json({ error: 'User not found' });
@@ -477,4 +485,3 @@ router.get('/export/users', authenticate, requireRole('admin'), (req, res) => {
 });
 
 export default router;
-

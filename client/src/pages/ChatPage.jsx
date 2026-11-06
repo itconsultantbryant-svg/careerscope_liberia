@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import api, { assetUrl } from '../utils/api';
 import { toast } from 'sonner';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import DashboardLayout from '../components/DashboardLayout';
+import { useSearchParams } from 'react-router-dom';
 import Chat from '../components/Chat';
 import { MessageSquare, Search, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -17,6 +17,17 @@ export default function ChatPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const id = Number(params.get('userId'));
+    if (!id) return;
+    const contact = contacts.find(person => person.id === id);
+    const conversation = conversations.find(item => item.other_user_id === id);
+    if (contact || conversation) {
+      setSelectedUser(contact || { id, first_name: conversation.other_user_name.split(' ')[0], last_name: conversation.other_user_name.split(' ').slice(1).join(' '), profile_image: conversation.other_user_image });
+      setParams({}, { replace: true });
+    }
+  }, [params, contacts, conversations, setParams]);
 
   useEffect(() => {
     fetchConversations();
@@ -65,8 +76,8 @@ export default function ChatPage() {
   );
 
   return (
+    <DashboardLayout flush>
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
       
       <div className="flex flex-col md:flex-row min-h-[calc(100vh-64px)] md:h-[calc(100vh-64px)]">
         {/* Conversations List */}
@@ -215,7 +226,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      <Footer />
     </div>
+    </DashboardLayout>
   );
 }
